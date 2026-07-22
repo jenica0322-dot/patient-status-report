@@ -1,0 +1,43 @@
+/* app/styles/Layout.module.css */
+
+.installButton {
+  position: fixed;
+  top: 16px;
+  right: 24px;
+  z-index: 1050;
+
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  background: var(--gradient-primary, #0d9488);
+  color: white;
+  border: none;
+  border-radius: var(--radius-md, 10px);
+  padding: 10px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: var(--shadow-md, 0 4px 12px rgba(0, 0, 0, 0.15));
+  transition: all 0.2s ease-in-out;
+}
+
+.installButton:hover {
+  box-shadow: var(--shadow-lg, 0 8px 20px rgba(0, 0, 0, 0.18));
+  transform: translateY(-2px);
+}
+
+.installButtonText {
+  display: block;
+}
+
+@media (max-width: 480px) {
+  .installButtonText {
+    display: none;
+  }
+
+  .installButton {
+    padding: 10px;
+    border-radius: 50%;
+  }
+}

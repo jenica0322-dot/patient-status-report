@@ -1,0 +1,198 @@
+/* app/styles/SideBar.module.css */
+
+.sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 100vh;
+  background-color: #ffffff;
+  border-right: 1px solid var(--border-color, #e2e8f0);
+  color: var(--primary-text, #1e293b);
+  padding: 1rem 0.85rem;
+  padding-top: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  transition: width 0.3s var(--ease-standard, ease-in-out);
+  z-index: 1030;
+}
+
+.sidebarCollapsed {
+  width: 88px;
+}
+
+.sidebarExpanded {
+  width: 260px;
+}
+
+.contentWrapper {
+  transition: margin-left 0.3s var(--ease-standard, ease-in-out);
+  padding-top: 88px;
+  padding-left: 1.25rem;
+  padding-right: 1.25rem;
+  padding-bottom: 2rem;
+  min-height: 100vh;
+}
+
+.contentWrapperCollapsed {
+  margin-left: 88px;
+}
+
+.contentWrapperExpanded {
+  margin-left: 260px;
+}
+
+@media (max-width: 767.98px) {
+  .contentWrapper {
+    margin-left: 0 !important;
+    padding-top: 80px;
+    padding-left: 0.85rem;
+    padding-right: 0.85rem;
+  }
+}
+
+.nav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.sidebarButton {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 0.7rem 0.85rem;
+  color: var(--secondary-text, #64748b);
+  text-align: left;
+  background: none;
+  border: none;
+  border-left: 3px solid transparent;
+  border-radius: var(--radius-sm, 8px);
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.sidebarButton:hover {
+  background-color: var(--accent-bg, #eef7f6);
+  color: var(--brand-700, #0f766e);
+}
+
+.sidebarButtonActive {
+  background-color: var(--brand-50, #f0fdfa);
+  color: var(--brand-700, #0f766e);
+  border-left-color: var(--brand-600, #0d9488);
+  font-weight: 700;
+}
+
+.buttonText {
+  margin-left: 0.9rem;
+  opacity: 1;
+  transition: all 0.2s ease-in-out;
+}
+
+.sidebarCollapsed .sidebarButton {
+  justify-content: center;
+  padding: 0.65rem;
+  border-left: none;
+  border-radius: 50%;
+  width: 44px;
+  height: 44px;
+  margin: 0 auto;
+}
+
+.sidebarCollapsed .sidebarButtonActive {
+  background-color: var(--brand-100, #ccfbf1);
+}
+
+.sidebarCollapsed .buttonText {
+  display: none;
+}
+
+.profileCard {
+  padding: 0.75rem 0 1rem;
+  margin-bottom: 0.5rem;
+  text-align: center;
+  border-bottom: 1px solid var(--border-color, #e2e8f0);
+  transition: all 0.3s ease;
+}
+
+.avatar {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: var(--gradient-primary, #0d9488);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 0 auto 0.5rem;
+  box-shadow: var(--shadow-sm);
+  transition: width 0.3s ease, height 0.3s ease, font-size 0.3s ease;
+}
+
+.sidebarCollapsed .avatar {
+  width: 40px;
+  height: 40px;
+  font-size: 1.2rem;
+}
+
+.employeeName {
+  font-weight: 600;
+  display: block;
+  word-wrap: break-word;
+  opacity: 1;
+  transition: all 0.2s;
+  font-size: 0.85rem;
+  color: var(--primary-text, #1e293b);
+}
+
+.sidebarCollapsed .employeeName {
+  display: none;
+}
+
+.sidebarCollapsed .patientCard {
+  display: none;
+}
+
+.patientCard {
+  padding: 0.65rem;
+  margin-bottom: 0.5rem;
+  text-align: center;
+  border-radius: var(--radius-md, 12px);
+  background-color: var(--brand-50, #f0fdfa);
+  color: var(--brand-800, #115e59);
+  border: 1px solid var(--brand-100, #ccfbf1);
+  font-size: 0.78rem;
+}
+
+.toggleButton {
+  color: var(--secondary-text, #64748b);
+  border-radius: 50%;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 0.75rem;
+  margin-left: auto;
+  margin-right: auto;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+.toggleButton:hover {
+  background-color: var(--accent-bg, #eef7f6);
+  color: var(--brand-700, #0f766e);
+}
+
+.offcanvas {
+  background-color: #ffffff;
+  color: var(--primary-text, #1e293b);
+}
+
+.hr {
+  border-color: var(--border-color, #e2e8f0);
+  opacity: 1;
+  margin: 0.5rem 0;
+}

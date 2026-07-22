@@ -1,0 +1,240 @@
+/* app/styles/StatusMatcher.module.css */
+
+.wrapper {
+  width: 100%;
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+
+.scopeBar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: center;
+  background: var(--secondary-bg);
+  border-radius: 16px;
+  padding: 1rem 1.5rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.targetBox {
+  background: var(--primary-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  padding: 2rem;
+  box-shadow: var(--shadow-md);
+  transition: all 0.3s ease;
+}
+
+.targetBox:hover {
+  box-shadow: var(--shadow-lg);
+  transform: translateY(-2px);
+}
+
+.targetBox label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--secondary-text);
+  display: block;
+  margin-bottom: 0.5rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.targetBox p {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--accent-text);
+  margin: 0;
+  background: var(--gradient-primary);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.transcriptBox {
+  background: var(--secondary-bg);
+  border: 2px solid transparent;
+  border-radius: 20px;
+  padding: 2.5rem;
+  min-height: 220px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  box-shadow: var(--shadow-lg);
+  position: relative;
+  overflow: hidden;
+}
+
+.transcriptBox::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: var(--gradient-primary);
+}
+
+.transcriptBox p {
+  margin: 0;
+  font-size: 1.375rem;
+  line-height: 1.6;
+  color: var(--primary-text);
+  font-weight: 500;
+  text-align: center;
+}
+
+.transcriptBox .placeholder {
+  font-size: 1.25rem;
+  color: var(--secondary-text);
+  font-style: italic;
+}
+
+.controls {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.micButton {
+  width: 100px;
+  height: 100px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border: none;
+  background: var(--gradient-primary);
+  color: white;
+  box-shadow: var(--shadow-xl);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+.micButton::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--gradient-secondary);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.micButton:hover {
+  transform: scale(1.05) translateY(-2px);
+  box-shadow: 0 20px 40px rgba(13, 148, 136, 0.3);
+}
+
+.micButton:hover::before {
+  opacity: 1;
+}
+
+.micButton:active {
+  transform: scale(0.98);
+}
+
+.micButton.isListening {
+  background: var(--error-red);
+  animation: pulse 2s infinite;
+  box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+}
+
+.micButton.isListening::before {
+  opacity: 0;
+}
+
+.statusText {
+  font-size: 1.125rem;
+  font-weight: 500;
+  color: var(--secondary-text);
+  text-align: center;
+  max-width: 300px;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+  }
+  50% {
+    box-shadow: 0 0 0 20px rgba(239, 68, 68, 0);
+  }
+}
+
+.presetSelect {
+  width: 100%;
+  padding: 0.875rem 1rem;
+  font-size: 1rem;
+  border-radius: 12px;
+  border: 2px solid var(--border-color);
+  background: var(--primary-bg);
+  margin-bottom: 1rem;
+  transition: all 0.3s ease;
+  font-weight: 500;
+  color: var(--primary-text);
+  box-shadow: var(--shadow-sm);
+}
+
+.presetSelect:focus {
+  outline: none;
+  border-color: var(--primary-blue);
+  box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.15);
+}
+
+.presetSelect:hover {
+  border-color: var(--primary-blue-hover);
+}
+
+.checkboxToggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 1rem;
+  border-radius: 16px;
+  border: 2px solid var(--border-color);
+  background: var(--secondary-bg);
+  font-size: 1.25rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.checkboxToggle.checked {
+  background: var(--success-bg);
+  border-color: var(--success-green);
+  color: var(--success-text);
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .wrapper {
+    padding: 1rem;
+    gap: 1.5rem;
+  }
+
+  .targetBox {
+    padding: 1.5rem;
+  }
+
+  .transcriptBox {
+    padding: 2rem 1.5rem;
+    min-height: 180px;
+  }
+
+  .micButton {
+    width: 80px;
+    height: 80px;
+  }
+}

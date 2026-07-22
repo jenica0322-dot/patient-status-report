@@ -1,0 +1,84 @@
+/* app/styles/NavHeader.module.css */
+
+.appHeader {
+  background-color: rgba(255, 255, 255, 0.92);
+  backdrop-filter: saturate(180%) blur(8px);
+  -webkit-backdrop-filter: saturate(180%) blur(8px);
+  box-shadow: 0 1px 0 rgba(15, 23, 42, 0.06);
+  border-bottom: 1px solid var(--border-color, #e2e8f0);
+  min-height: 64px;
+}
+
+.menuButton {
+  border-color: var(--border-color-strong, #cbd5e1) !important;
+  color: var(--primary-text, #1e293b) !important;
+}
+
+.menuButton:hover {
+  background-color: var(--accent-bg, #eef7f6) !important;
+}
+
+.headerBrand {
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  color: var(--primary-text, #1e293b);
+}
+
+.brandIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-md, 12px);
+  background: var(--gradient-primary, #0d9488);
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.headerTitle {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--accent-text, #0f172a);
+  letter-spacing: -0.01em;
+}
+
+.patientBadge {
+  display: inline-flex;
+  align-items: center;
+  color: var(--brand-700, #0f766e);
+  background: var(--brand-100, #ccfbf1);
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 0.25rem 0.65rem;
+  border-radius: 999px;
+  margin-left: 0.75rem;
+}
+
+.welcomeText {
+  color: var(--secondary-text, #64748b);
+  font-weight: 500;
+}
+
+.welcomeContainer {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.75rem;
+  border-radius: 999px;
+  background: var(--secondary-bg, #f7fafa);
+  border: 1px solid var(--border-color, #e2e8f0);
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.welcomeContainer:hover {
+  background-color: var(--accent-bg, #eef7f6);
+  border-color: var(--brand-200, #99f6e4);
+}
+
+.welcomeIcon {
+  color: var(--brand-600, #0d9488);
+  flex-shrink: 0;
+}
