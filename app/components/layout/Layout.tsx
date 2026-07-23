@@ -151,6 +151,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
         patient_name={patientName}
         isDesktop={isDesktop}
         isSidebarExpanded={isSidebarExpanded}
+        reserveInstallButtonSpace={isInstallable}
       />
 
       {isDesktop && (

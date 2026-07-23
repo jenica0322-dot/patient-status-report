@@ -10,6 +10,7 @@ import {
   fetchStatusRecords,
 } from "@/app/lib/statusApi";
 import { usePatient } from "@/app/context/PatientContext";
+import { JaDateInput, JaMonthInput } from "@/app/components/JaDatePicker";
 
 declare global {
   interface Window {
@@ -424,20 +425,16 @@ export default function StatusMatcher() {
           ))}
         </div>
         {screenKey === "daily_status" ? (
-          <input
-            type="date"
+          <JaDateInput
             className="form-control form-control-sm"
-            style={{ maxWidth: 180 }}
             value={recordDate}
-            onChange={(e) => setRecordDate(e.target.value)}
+            onChange={setRecordDate}
           />
         ) : (
-          <input
-            type="month"
+          <JaMonthInput
             className="form-control form-control-sm"
-            style={{ maxWidth: 180 }}
             value={yearMonth}
-            onChange={(e) => setYearMonth(e.target.value)}
+            onChange={setYearMonth}
           />
         )}
         <button type="button" className="btn btn-sm btn-success ms-auto" onClick={handleSaveRecord}>
@@ -454,7 +451,7 @@ export default function StatusMatcher() {
         >
           {fields.map((f) => (
             <option key={f.field_key} value={f.field_key}>
-              {f.field_label} ({f.field_type})
+              {f.field_label}
             </option>
           ))}
         </select>

@@ -11,6 +11,7 @@ type NavHeaderProps = {
   onMenuClick: () => void;
   isDesktop: boolean;
   isSidebarExpanded: boolean;
+  reserveInstallButtonSpace?: boolean;
 };
 
 const NavHeader: React.FC<NavHeaderProps> = ({
@@ -19,6 +20,7 @@ const NavHeader: React.FC<NavHeaderProps> = ({
   onMenuClick,
   isDesktop,
   isSidebarExpanded,
+  reserveInstallButtonSpace,
 }) => {
   const collapsedWidth = 80;
   const expandedWidth = 260;
@@ -61,7 +63,9 @@ const NavHeader: React.FC<NavHeaderProps> = ({
           )}
         </Navbar.Brand>
 
-        <Nav className="ms-auto">
+        <Nav
+          className={`ms-auto ${reserveInstallButtonSpace ? styles.reserveInstallSpace : ""}`}
+        >
           <div className={styles.welcomeContainer}>
             <PersonCircle size={20} className={styles.welcomeIcon} />
             <span className={`${styles.welcomeText} d-none d-md-inline`}>

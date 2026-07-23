@@ -82,3 +82,13 @@
   color: var(--brand-600, #0d9488);
   flex-shrink: 0;
 }
+
+.reserveInstallSpace {
+  margin-right: 160px;
+}
+
+@media (max-width: 480px) {
+  .reserveInstallSpace {
+    margin-right: 56px;
+  }
+}

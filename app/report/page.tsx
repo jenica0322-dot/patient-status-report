@@ -6,6 +6,7 @@ import { useEffect, useState, useMemo } from "react";
 import { Container, Row, Col, Card, Form, Badge, Table, Spinner, Alert } from "react-bootstrap";
 import { FileText, Calendar } from "react-bootstrap-icons";
 import Layout from "../components/layout/Layout";
+import { JaMonthInput } from "../components/JaDatePicker";
 import { usePatient } from "../context/PatientContext";
 import {
   fetchPatients,
@@ -134,10 +135,10 @@ export default function ReportPage() {
                   <Calendar className="me-1" />
                   記録月
                 </Form.Label>
-                <Form.Control
-                  type="month"
+                <JaMonthInput
+                  className="form-control"
                   value={yearMonth}
-                  onChange={(e) => setYearMonth(e.target.value)}
+                  onChange={setYearMonth}
                 />
               </Col>
             </Row>
