@@ -78,8 +78,8 @@ function bestFieldMatch(utterance: string, fields: Field[]): Field | null {
   return best && best.score >= 60 ? best.f : null;
 }
 
-const AFFIRMATIVE = /^(はい|した|できた|チェック|レ|まる|○|✓|ok|オーケー)$/;
-const NEGATIVE = /^(いいえ|なし|しない|できていない|ばつ|×|no)$/;
+const AFFIRMATIVE = /^(よし|した|できた|チェック|レ|まる|○|✓|ok|オーケー)$/;
+const NEGATIVE = /^(なし|しない|できていない|ばつ|×|no)$/;
 
 async function canRecordMic() {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -367,7 +367,7 @@ export default function StatusMatcher() {
         setFieldValue(currentKey, false);
         setStatusMsg(`${field.field_label}: チェックを外しました`);
       } else {
-        setStatusMsg("「はい」「いいえ」などで回答してください");
+        setStatusMsg("「よし」「なし」などで回答してください");
       }
       return;
     }
@@ -555,7 +555,7 @@ export default function StatusMatcher() {
           <p>{transcript}</p>
         ) : (
           <p className={styles.placeholder}>
-            マイクで話してください…（例：「完食」「はい」「コメント〜」「保存」）
+            マイクで話してください…（例：「完食」「よし」「コメント〜」「保存」）
           </p>
         )}
       </div>
