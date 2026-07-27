@@ -3,16 +3,15 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
-import { Container, Row, Col, Card, Form, Badge, Table, Spinner, Alert } from "react-bootstrap";
+import { Container, Row, Col, Card, Form, Badge, Table, Spinner, Alert, Button } from "react-bootstrap";
 import { FileText, Calendar } from "react-bootstrap-icons";
+import Link from "next/link";
 import Layout from "../components/layout/Layout";
 import { JaMonthInput } from "../components/JaDatePicker";
 import { usePatient } from "../context/PatientContext";
 import {
-  fetchPatients,
   fetchStatusFields,
   fetchPatientReport,
-  Patient,
 } from "../lib/statusApi";
 
 interface Field {
@@ -46,8 +45,7 @@ function formatValue(v: any) {
 export default function ReportPage() {
   const { selectedPatient } = usePatient();
 
-  const [patients, setPatients] = useState<Patient[]>([]);
-  const [patientId, setPatientId] = useState<number | null>(selectedPatient?.id ?? null);
+  const patientId = selectedPatient?.id ?? null;
   const [yearMonth, setYearMonth] = useState(currentYearMonth());
 
   const [dailyFields, setDailyFields] = useState<Field[]>([]);
@@ -57,13 +55,15 @@ export default function ReportPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchPatients().then(setPatients).catch(() => {});
     fetchStatusFields("daily_status").then(setDailyFields).catch(() => {});
     fetchStatusFields("monthly_report").then(setMonthlyFields).catch(() => {});
   }, []);
 
   useEffect(() => {
-    if (!patientId) return;
+    if (!patientId) {
+      setReport(null);
+      return;
+    }
     (async () => {
       try {
         setLoading(true);
@@ -118,17 +118,23 @@ export default function ReportPage() {
             <Row className="g-3 align-items-end">
               <Col md={5}>
                 <Form.Label>利用者</Form.Label>
-                <Form.Select
-                  value={patientId ?? ""}
-                  onChange={(e) => setPatientId(e.target.value ? Number(e.target.value) : null)}
-                >
-                  <option value="">選択してください</option>
-                  {patients.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-                </Form.Select>
+                {selectedPatient ? (
+                  <div className="form-control bg-light">
+                    {selectedPatient.name}
+                    <span className="text-muted small ms-2">
+                      (pat_id {selectedPatient.pat_id ?? selectedPatient.id})
+                    </span>
+                  </div>
+                ) : (
+                  <div>
+                    <div className="text-muted small mb-2">先に利用者を選択してください</div>
+                    <Link href="/patients">
+                      <Button variant="outline-primary" size="sm">
+                        利用者選択へ
+                      </Button>
+                    </Link>
+                  </div>
+                )}
               </Col>
               <Col md={4}>
                 <Form.Label>

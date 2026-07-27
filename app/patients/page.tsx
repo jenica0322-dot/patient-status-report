@@ -1,8 +1,9 @@
 // app/patients/page.tsx
+// 利用者選択 — paginated read-only list from mst_customer (pat_id = patient_id)
 
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Container,
@@ -15,67 +16,104 @@ import {
   Spinner,
   Badge,
 } from "react-bootstrap";
-import { PersonLinesFill, Plus, Trash, CheckCircleFill, PersonCircle } from "react-bootstrap-icons";
+import { PersonLinesFill, CheckCircleFill, PersonCircle } from "react-bootstrap-icons";
 import Layout from "../components/layout/Layout";
 import { usePatient } from "../context/PatientContext";
-import { fetchPatients, savePatient, deletePatient, Patient } from "../lib/statusApi";
+import {
+  fetchPatients,
+  fetchPatientAreas,
+  Patient,
+  PatientArea,
+} from "../lib/statusApi";
+
+const PAGE_SIZE = 50;
 
 export default function PatientsPage() {
   const router = useRouter();
-  const { selectedPatient, selectPatient, clearPatient } = usePatient();
+  const { selectedPatient, selectPatient } = usePatient();
 
   const [patients, setPatients] = useState<Patient[]>([]);
-  const [newName, setNewName] = useState("");
+  const [areas, setAreas] = useState<PatientArea[]>([]);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [queryInput, setQueryInput] = useState("");
+  const [query, setQuery] = useState("");
+  const [areaFilter, setAreaFilter] = useState("");
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const loadingMoreRef = useRef(false);
+
+  // Debounce search box → server query
   useEffect(() => {
-    load();
+    const t = setTimeout(() => setQuery(queryInput.trim()), 300);
+    return () => clearTimeout(t);
+  }, [queryInput]);
+
+  useEffect(() => {
+    fetchPatientAreas()
+      .then(setAreas)
+      .catch((e) => console.error(e));
   }, []);
 
-  const load = async () => {
-    try {
-      setLoading(true);
-      const data = await fetchPatients();
-      setPatients(data);
-    } catch (e) {
-      console.error(e);
-      setMessage({ type: "error", text: "利用者一覧の読み込みに失敗しました" });
-    } finally {
-      setLoading(false);
-    }
-  };
+  const loadPage = useCallback(
+    async (nextPage: number, append: boolean) => {
+      if (append) {
+        if (loadingMoreRef.current) return;
+        loadingMoreRef.current = true;
+        setLoadingMore(true);
+      } else {
+        setLoading(true);
+      }
+      try {
+        const data = await fetchPatients({
+          page: nextPage,
+          limit: PAGE_SIZE,
+          q: query || undefined,
+          belong_area: areaFilter || undefined,
+        });
+        setPatients((prev) => (append ? [...prev, ...data.items] : data.items));
+        setPage(data.page);
+        setTotal(data.total);
+        setHasMore(data.hasMore);
+      } catch (e) {
+        console.error(e);
+        setMessage({ type: "error", text: "利用者一覧の読み込みに失敗しました" });
+      } finally {
+        setLoading(false);
+        setLoadingMore(false);
+        loadingMoreRef.current = false;
+      }
+    },
+    [query, areaFilter]
+  );
 
-  const handleAdd = async () => {
-    if (!newName.trim()) return;
-    try {
-      setLoading(true);
-      await savePatient({ name: newName.trim() });
-      setNewName("");
-      setMessage({ type: "success", text: "利用者を登録しました" });
-      await load();
-    } catch (e) {
-      console.error(e);
-      setMessage({ type: "error", text: "登録に失敗しました" });
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Reset list when filters change
+  useEffect(() => {
+    setPatients([]);
+    setPage(1);
+    setHasMore(false);
+    loadPage(1, false);
+  }, [loadPage]);
 
-  const handleDelete = async (p: Patient) => {
-    if (!confirm(`利用者「${p.name}」を削除しますか？`)) return;
-    try {
-      setLoading(true);
-      await deletePatient(p.id);
-      if (selectedPatient?.id === p.id) clearPatient();
-      await load();
-    } catch (e) {
-      console.error(e);
-      setMessage({ type: "error", text: "削除に失敗しました" });
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Infinite scroll
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el) return;
+    const obs = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting && hasMore && !loading && !loadingMore) {
+          loadPage(page + 1, true);
+        }
+      },
+      { rootMargin: "200px" }
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [hasMore, loading, loadingMore, page, loadPage]);
 
   const handleSelect = (p: Patient) => {
     selectPatient(p);
@@ -100,12 +138,14 @@ export default function PatientsPage() {
           </div>
           <div>
             <h1 className="h4 mb-0 fw-bold">利用者選択</h1>
-            <p className="text-muted mb-0 small">記録・報告の対象となる利用者を登録・選択します</p>
+            <p className="text-muted mb-0 small">
+              顧客マスタから選択（patient_id = pat_id）。{total > 0 ? `${total} 件` : ""}
+            </p>
           </div>
         </div>
 
         <Row className="justify-content-center">
-          <Col lg={8} xl={6}>
+          <Col lg={10} xl={8}>
             <Card>
               <Card.Body className="p-4">
                 {message && (
@@ -118,23 +158,28 @@ export default function PatientsPage() {
                   </Alert>
                 )}
 
-                <Form
-                  className="d-flex gap-2 mb-4"
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    handleAdd();
-                  }}
-                >
-                  <Form.Control
-                    placeholder="新しい利用者名"
-                    value={newName}
-                    onChange={(e) => setNewName(e.target.value)}
-                  />
-                  <Button variant="primary" type="submit" disabled={loading} className="text-nowrap flex-shrink-0">
-                    <Plus className="me-1" />
-                    追加
-                  </Button>
-                </Form>
+                <Row className="g-2 mb-3">
+                  <Col md={7}>
+                    <Form.Control
+                      placeholder="名前・カナ・電話・住所・pat_id で検索"
+                      value={queryInput}
+                      onChange={(e) => setQueryInput(e.target.value)}
+                    />
+                  </Col>
+                  <Col md={5}>
+                    <Form.Select
+                      value={areaFilter}
+                      onChange={(e) => setAreaFilter(e.target.value)}
+                    >
+                      <option value="">すべてのエリア</option>
+                      {areas.map((a) => (
+                        <option key={a.code} value={a.code}>
+                          {a.code} — {a.name}
+                        </option>
+                      ))}
+                    </Form.Select>
+                  </Col>
+                </Row>
 
                 {loading ? (
                   <div className="text-center py-5">
@@ -143,12 +188,13 @@ export default function PatientsPage() {
                 ) : patients.length === 0 ? (
                   <div className="text-center py-5 text-muted">
                     <PersonCircle size={36} className="mb-2 opacity-50" />
-                    <div>利用者が登録されていません</div>
+                    <div>該当する利用者がいません</div>
                   </div>
                 ) : (
                   <div className="d-flex flex-column gap-2">
                     {patients.map((p) => {
                       const isSelected = selectedPatient?.id === p.id;
+                      const initial = (p.name || "?").charAt(0);
                       return (
                         <div
                           key={p.id}
@@ -159,48 +205,79 @@ export default function PatientsPage() {
                             transition: "all 0.15s ease",
                           }}
                         >
-                          <div className="d-flex align-items-center gap-3">
+                          <div className="d-flex align-items-center gap-3 min-w-0">
                             <div
                               className="d-flex align-items-center justify-content-center flex-shrink-0 fw-bold"
                               style={{
                                 width: 40,
                                 height: 40,
                                 borderRadius: "50%",
-                                background: isSelected ? "var(--gradient-primary)" : "var(--secondary-bg)",
+                                background: isSelected
+                                  ? "var(--gradient-primary)"
+                                  : "var(--secondary-bg)",
                                 color: isSelected ? "#fff" : "var(--secondary-text)",
                               }}
                             >
-                              {p.name.charAt(0)}
+                              {initial}
                             </div>
-                            <div className="d-flex align-items-center gap-2">
-                              <span className="fw-semibold">{p.name}</span>
-                              {isSelected && (
-                                <Badge bg="success" pill className="d-flex align-items-center gap-1">
-                                  <CheckCircleFill size={11} />
-                                  選択中
+                            <div className="min-w-0">
+                              <div className="d-flex align-items-center gap-2 flex-wrap">
+                                <span className="fw-semibold">{p.name}</span>
+                                <Badge bg="light" text="dark" pill>
+                                  pat_id {p.pat_id ?? p.id}
                                 </Badge>
+                                {p.belong_area_name && (
+                                  <Badge bg="secondary" pill>
+                                    {p.belong_area_name}
+                                  </Badge>
+                                )}
+                                {isSelected && (
+                                  <Badge
+                                    bg="success"
+                                    pill
+                                    className="d-flex align-items-center gap-1"
+                                  >
+                                    <CheckCircleFill size={11} />
+                                    選択中
+                                  </Badge>
+                                )}
+                              </div>
+                              {(p.customer_kana || p.customer_address1) && (
+                                <div className="text-muted small text-truncate">
+                                  {[p.customer_kana, p.customer_address1, p.customer_tel]
+                                    .filter(Boolean)
+                                    .join(" / ")}
+                                </div>
                               )}
                             </div>
                           </div>
-                          <div className="d-flex gap-2">
-                            <Button
-                              variant={isSelected ? "outline-success" : "outline-primary"}
-                              size="sm"
-                              onClick={() => handleSelect(p)}
-                            >
-                              選択
-                            </Button>
-                            <Button
-                              variant="outline-danger"
-                              size="sm"
-                              onClick={() => handleDelete(p)}
-                            >
-                              <Trash />
-                            </Button>
-                          </div>
+                          <Button
+                            variant={isSelected ? "outline-success" : "outline-primary"}
+                            size="sm"
+                            className="flex-shrink-0"
+                            onClick={() => handleSelect(p)}
+                          >
+                            選択
+                          </Button>
                         </div>
                       );
                     })}
+
+                    <div ref={sentinelRef} className="py-3 text-center">
+                      {loadingMore && <Spinner animation="border" size="sm" />}
+                      {!hasMore && patients.length > 0 && (
+                        <div className="text-muted small">すべて表示しました</div>
+                      )}
+                      {hasMore && !loadingMore && (
+                        <Button
+                          variant="outline-secondary"
+                          size="sm"
+                          onClick={() => loadPage(page + 1, true)}
+                        >
+                          さらに読み込む
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 )}
               </Card.Body>

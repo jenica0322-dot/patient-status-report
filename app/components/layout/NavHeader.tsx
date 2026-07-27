@@ -1,4 +1,5 @@
 // app/components/layout/NavHeader.tsx
+"use client";
 
 import React from "react";
 import { Navbar, Container, Nav, Button } from "react-bootstrap";
