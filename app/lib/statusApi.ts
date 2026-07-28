@@ -144,6 +144,10 @@ export async function fetchStatusRecords(params: {
   return r.json();
 }
 
+export function patientReportExportUrl(patientId: number, yearMonth: string) {
+  return `${API_BASE}/api/status-report/export?patient_id=${patientId}&year_month=${encodeURIComponent(yearMonth)}`;
+}
+
 // ===== Report =====
 export async function fetchPatientReport(patientId: number, yearMonth: string) {
   const r = await fetch(

@@ -54,78 +54,135 @@ function isChecked(fieldValue) {
   return v === true || v === "✓" || v === "true";
 }
 
+// Shared by the JSON report endpoint and the Excel export — one query path, one shape.
+// Empty status_records is OK → days=[] / monthlyReport=null, not an error.
+async function loadReportData(patientId, yearMonth) {
+  let patient = null;
+  try {
+    patient = await resolvePatient(patientId);
+  } catch (lookupErr) {
+    console.error("resolvePatient error:", lookupErr);
+    // Still serve an empty report shell; do not fail solely on lookup.
+  }
+  if (!patient) {
+    patient = {
+      id: Number(patientId),
+      name: `pat_id ${patientId}`,
+    };
+  }
+
+  const [y, m] = yearMonth.split("-").map(Number);
+  const from = `${yearMonth}-01`;
+  const lastDay = new Date(y, m, 0).getDate();
+  const to = `${yearMonth}-${String(lastDay).padStart(2, "0")}`;
+
+  const dailyResult = await primary().query(
+    `SELECT record_date, values FROM status_records
+     WHERE screen_key='daily_status' AND patient_id=$1 AND record_date BETWEEN $2 AND $3
+     ORDER BY record_date`,
+    [patientId, from, to]
+  );
+
+  const tallies = {};
+  for (const [group, keys] of Object.entries(TALLY_GROUPS)) {
+    tallies[group] = {};
+    for (const key of keys) {
+      tallies[group][key] = 0;
+    }
+  }
+  for (const row of dailyResult.rows) {
+    const values = row.values || {};
+    for (const keys of Object.values(TALLY_GROUPS)) {
+      for (const key of keys) {
+        if (isChecked(values[key])) {
+          for (const group of Object.keys(TALLY_GROUPS)) {
+            if (TALLY_GROUPS[group].includes(key)) tallies[group][key] += 1;
+          }
+        }
+      }
+    }
+  }
+
+  const monthlyResult = await primary().query(
+    `SELECT values FROM status_records
+     WHERE screen_key='monthly_report' AND patient_id=$1 AND record_year_month=$2`,
+    [patientId, yearMonth]
+  );
+
+  return {
+    patient,
+    yearMonth,
+    daysInMonth: lastDay,
+    days: dailyResult.rows,
+    tallies,
+    monthlyReport: monthlyResult.rows[0]?.values || null,
+  };
+}
+
 // GET /api/status-report?patient_id=&year_month=YYYY-MM
 // patient_id is mst_customer.pat_id when PATIENTS_DB_SOURCE=users
-// Empty status_records is OK → 200 with days=[] / monthlyReport=null
 const getPatientReport = async (req, res) => {
   try {
     const { patient_id, year_month } = req.query;
     if (!patient_id || !year_month)
       return res.status(400).json({ error: "patient_id and year_month are required" });
 
-    let patient = null;
-    try {
-      patient = await resolvePatient(patient_id);
-    } catch (lookupErr) {
-      console.error("resolvePatient error:", lookupErr);
-      // Still serve an empty report shell; do not fail solely on lookup.
-    }
-    if (!patient) {
-      patient = {
-        id: Number(patient_id),
-        name: `pat_id ${patient_id}`,
-      };
-    }
-
-    const [y, m] = year_month.split("-").map(Number);
-    const from = `${year_month}-01`;
-    const lastDay = new Date(y, m, 0).getDate();
-    const to = `${year_month}-${String(lastDay).padStart(2, "0")}`;
-
-    const dailyResult = await primary().query(
-      `SELECT record_date, values FROM status_records
-       WHERE screen_key='daily_status' AND patient_id=$1 AND record_date BETWEEN $2 AND $3
-       ORDER BY record_date`,
-      [patient_id, from, to]
-    );
-
-    const tallies = {};
-    for (const [group, keys] of Object.entries(TALLY_GROUPS)) {
-      tallies[group] = {};
-      for (const key of keys) {
-        tallies[group][key] = 0;
-      }
-    }
-    for (const row of dailyResult.rows) {
-      const values = row.values || {};
-      for (const keys of Object.values(TALLY_GROUPS)) {
-        for (const key of keys) {
-          if (isChecked(values[key])) {
-            for (const group of Object.keys(TALLY_GROUPS)) {
-              if (TALLY_GROUPS[group].includes(key)) tallies[group][key] += 1;
-            }
-          }
-        }
-      }
-    }
-
-    const monthlyResult = await primary().query(
-      `SELECT values FROM status_records
-       WHERE screen_key='monthly_report' AND patient_id=$1 AND record_year_month=$2`,
-      [patient_id, year_month]
-    );
-
-    res.json({
-      patient,
-      yearMonth: year_month,
-      days: dailyResult.rows,
-      tallies,
-      monthlyReport: monthlyResult.rows[0]?.values || null,
-    });
+    const data = await loadReportData(patient_id, year_month);
+    res.json(data);
   } catch (e) {
     console.error("getPatientReport error:", e);
     res.status(500).json({ error: "internal", detail: e.message });
   }
 };
 
-module.exports = { getPatientReport };
+// GET /api/status-report/export?patient_id=&year_month=YYYY-MM
+// Streams an .xlsx built to match the 状況記録表兼報告書 layout, ready to print.
+const exportPatientReportExcel = async (req, res) => {
+  try {
+    const { patient_id, year_month } = req.query;
+    if (!patient_id || !year_month)
+      return res.status(400).json({ error: "patient_id and year_month are required" });
+
+    const [data, dailyFieldsResult, monthlyFieldsResult] = await Promise.all([
+      loadReportData(patient_id, year_month),
+      primary().query(
+        `SELECT field_key, field_label, field_type, phrases, order_index FROM status_fields
+         WHERE screen_key='daily_status' ORDER BY order_index, field_key`
+      ),
+      primary().query(
+        `SELECT field_key, field_label, field_type, phrases, order_index FROM status_fields
+         WHERE screen_key='monthly_report' ORDER BY order_index, field_key`
+      ),
+    ]);
+
+    const parsePhrases = (p) => {
+      try {
+        return typeof p === "string" ? JSON.parse(p || "[]") : Array.isArray(p) ? p : [];
+      } catch {
+        return [];
+      }
+    };
+    const dailyFields = dailyFieldsResult.rows.map((r) => ({ ...r, phrases: parsePhrases(r.phrases) }));
+    const monthlyFields = monthlyFieldsResult.rows.map((r) => ({ ...r, phrases: parsePhrases(r.phrases) }));
+
+    const { buildReportWorkbook } = require("../lib/xlsxReportBuilder");
+    const workbook = await buildReportWorkbook({ data, dailyFields, monthlyFields });
+
+    const fileName = `状況記録表兼報告書_${data.patient.name}_${year_month}.xlsx`;
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="report.xlsx"; filename*=UTF-8''${encodeURIComponent(fileName)}`
+    );
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (e) {
+    console.error("exportPatientReportExcel error:", e);
+    res.status(500).json({ error: "internal", detail: e.message });
+  }
+};
+
+module.exports = { getPatientReport, exportPatientReportExcel };

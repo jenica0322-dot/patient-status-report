@@ -3,8 +3,8 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
-import { Container, Row, Col, Card, Form, Badge, Table, Spinner, Alert, Button } from "react-bootstrap";
-import { FileText, Calendar } from "react-bootstrap-icons";
+import { Container, Row, Col, Card, Form, Spinner, Alert, Button } from "react-bootstrap";
+import { FileText, Calendar, FileEarmarkExcel } from "react-bootstrap-icons";
 import Link from "next/link";
 import Layout from "../components/layout/Layout";
 import { JaMonthInput } from "../components/JaDatePicker";
@@ -12,34 +12,44 @@ import { usePatient } from "../context/PatientContext";
 import {
   fetchStatusFields,
   fetchPatientReport,
+  patientReportExportUrl,
 } from "../lib/statusApi";
-
-interface Field {
-  field_key: string;
-  field_label: string;
-  field_type: string;
-  phrases: string[];
-  order_index: number;
-}
+import {
+  ReportField,
+  TALLY_GROUPS,
+  FIELD_GROUP,
+  WEEKDAY_JA,
+  CIRCLED_NUMBERS,
+  isChecked,
+  textWithComment,
+  checklistOptions,
+  buildCommentBlocks,
+  buildCommentRowPlan,
+  groupColClass,
+  tallyCategoryClass,
+} from "../lib/reportFormat";
+import styles from "../styles/MonthlyReportGrid.module.css";
 
 function currentYearMonth() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
-function formatDate(isoDate: string) {
-  const [y, m, d] = isoDate.split("-");
-  return `${y}年${Number(m)}月${Number(d)}日`;
-}
-
-function formatValue(v: any) {
-  if (v === undefined || v === null || v === "") return "";
-  if (typeof v === "object") {
-    if (v.value === true) return "✓";
-    if (v.value === false || v.value === undefined) return v.comment || "";
-    return String(v.value) + (v.comment ? `（${v.comment}）` : "");
-  }
-  return String(v);
+function Checklist({ field, value }: { field: ReportField | undefined; value: any }) {
+  const options = checklistOptions(field, value);
+  return (
+    <span className={styles.checklist}>
+      {options.map((o, i) => (
+        <span
+          key={i}
+          className={`${styles.checklistOption} ${o.selected ? styles.checklistOptionOn : ""}`}
+        >
+          {o.selected ? "☑" : "☐"}
+          {o.label}
+        </span>
+      ))}
+    </span>
+  );
 }
 
 export default function ReportPage() {
@@ -48,8 +58,8 @@ export default function ReportPage() {
   const patientId = selectedPatient?.id ?? null;
   const [yearMonth, setYearMonth] = useState(currentYearMonth());
 
-  const [dailyFields, setDailyFields] = useState<Field[]>([]);
-  const [monthlyFields, setMonthlyFields] = useState<Field[]>([]);
+  const [dailyFields, setDailyFields] = useState<ReportField[]>([]);
+  const [monthlyFields, setMonthlyFields] = useState<ReportField[]>([]);
   const [report, setReport] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -79,17 +89,47 @@ export default function ReportPage() {
     })();
   }, [patientId, yearMonth]);
 
-  const dailyColumns = useMemo(
-    () => dailyFields.slice().sort((a, b) => a.order_index - b.order_index),
+  const dfByKey = useMemo(
+    () => Object.fromEntries(dailyFields.map((f) => [f.field_key, f])),
     [dailyFields]
   );
-  const monthlyOrdered = useMemo(
-    () => monthlyFields.slice().sort((a, b) => a.order_index - b.order_index),
+  const mfByKey = useMemo(
+    () => Object.fromEntries(monthlyFields.map((f) => [f.field_key, f])),
     [monthlyFields]
   );
+  const orderedDailyBody = useMemo(
+    () =>
+      dailyFields
+        .filter((f) => f.field_key !== "youbi" && f.field_key !== "uketori")
+        .sort((a, b) => a.order_index - b.order_index),
+    [dailyFields]
+  );
+  const commentBlocks = useMemo(() => buildCommentBlocks(monthlyFields), [monthlyFields]);
+  const tallyRowKeys = useMemo(
+    () => Object.entries(TALLY_GROUPS).flatMap(([group, keys]) => keys.map((k) => [group, k])),
+    []
+  );
+  const commentRowPlan = useMemo(
+    () => buildCommentRowPlan(tallyRowKeys.length, commentBlocks),
+    [tallyRowKeys.length, commentBlocks]
+  );
 
-  const tallyLabel = (key: string) =>
-    dailyFields.find((f) => f.field_key === key)?.field_label || key;
+  const monthlyValues = report?.monthlyReport || {};
+  const dayRowByDate = useMemo(() => {
+    const m = new Map<string, any>();
+    (report?.days || []).forEach((d: any) => m.set(d.record_date, d));
+    return m;
+  }, [report]);
+
+  const [y, m] = yearMonth.split("-");
+
+  // 日/曜/受取 + one column per daily field. The header-block rows above the grid
+  // are hand-tuned to this specific 17-column template (16 daily_status fields);
+  // the sections below derive their spans from it so they stay aligned if a
+  // field is added or removed in registerfield.
+  const totalCols = 3 + orderedDailyBody.length;
+  const commentColSpan = totalCols - 8; // 分類(2) + 確認項目(4) + 件数(2)
+  const footerShareColSpan = totalCols - 14; // 報告日(2+4) + 確認者(2+3) + label(3)
 
   return (
     <Layout>
@@ -113,7 +153,7 @@ export default function ReportPage() {
           </div>
         </div>
 
-        <Card className="mb-4">
+        <Card className={`mb-4 ${styles.noPrint}`}>
           <Card.Body>
             <Row className="g-3 align-items-end">
               <Col md={5}>
@@ -147,6 +187,17 @@ export default function ReportPage() {
                   onChange={setYearMonth}
                 />
               </Col>
+              <Col md={3} className="text-md-end">
+                {patientId && (
+                  <a
+                    className="btn btn-success"
+                    href={patientReportExportUrl(patientId, yearMonth)}
+                  >
+                    <FileEarmarkExcel className="me-2" />
+                    Excel印刷
+                  </a>
+                )}
+              </Col>
             </Row>
           </Card.Body>
         </Card>
@@ -165,95 +216,206 @@ export default function ReportPage() {
         )}
 
         {!loading && report && (
-          <>
-            <Card className="mb-4">
-              <Card.Header>
-                {report.patient.name} さん — {report.yearMonth} 日次記録
-              </Card.Header>
-              <Card.Body className="p-0">
-                <div className="table-responsive">
-                  <Table hover size="sm" className="mb-0">
-                    <thead className="table-light">
-                      <tr>
-                        <th>日付</th>
-                        {dailyColumns.map((f) => (
-                          <th key={f.field_key}>{f.field_label}</th>
+          <Card className="mb-4">
+            <Card.Body className={styles.gridScroll}>
+              <table className={styles.grid}>
+                <tbody>
+                  {/* Header block */}
+                  <tr>
+                    <td className={styles.labelCell} colSpan={2}>
+                      利用者名
+                    </td>
+                    <td className={styles.valueCell} colSpan={5}>
+                      {report.patient.name}
+                    </td>
+                    <td className={styles.labelCell} colSpan={2}>
+                      記録月
+                    </td>
+                    <td className={styles.valueCell} colSpan={8}>
+                      {Number(y)}年　{Number(m)}月
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className={styles.labelCell} colSpan={2}>
+                      配送担当
+                    </td>
+                    <td className={styles.valueCell} colSpan={5}>
+                      <Checklist field={mfByKey.hasso_tanto} value={monthlyValues.hasso_tanto} />
+                    </td>
+                    <td className={styles.labelCell} colSpan={2}>
+                      食事内容
+                    </td>
+                    <td className={styles.valueCell} colSpan={8}>
+                      <Checklist field={mfByKey.shokuji_naiyo} value={monthlyValues.shokuji_naiyo} />
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className={styles.labelCell} colSpan={2}>
+                      利用回数
+                    </td>
+                    <td className={styles.valueCell} colSpan={5}>
+                      {textWithComment(monthlyValues.riyo_kaisu)}
+                    </td>
+                    <td className={styles.labelCell} colSpan={2}>
+                      連絡方法
+                    </td>
+                    <td className={styles.valueCell} colSpan={8}>
+                      <Checklist field={mfByKey.renraku_hoho} value={monthlyValues.renraku_hoho} />
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className={styles.labelCell} colSpan={2}>
+                      報告先
+                    </td>
+                    <td className={styles.valueCell} colSpan={3}>
+                      {textWithComment(monthlyValues.hokoku_saki)}
+                    </td>
+                    <td className={styles.labelCell} colSpan={2}>
+                      先方担当者
+                    </td>
+                    <td className={styles.valueCell} colSpan={3}>
+                      {textWithComment(monthlyValues.senpo_tantosha)}
+                    </td>
+                    <td className={styles.labelCell} colSpan={2}>
+                      記入者
+                    </td>
+                    <td className={styles.valueCell} colSpan={5}>
+                      {textWithComment(monthlyValues.kinyusha)}
+                    </td>
+                  </tr>
+
+                  {/* Daily grid header */}
+                  <tr className={styles.headerRow}>
+                    <th style={{ width: 32 }}>日</th>
+                    <th style={{ width: 36 }}>{dfByKey.youbi?.field_label || "曜"}</th>
+                    <th style={{ width: 64 }}>{dfByKey.uketori?.field_label || "受取"}</th>
+                    {orderedDailyBody.map((f) => (
+                      <th key={f.field_key}>{f.field_label}</th>
+                    ))}
+                  </tr>
+
+                  {/* Daily grid rows — always shows every day of the month, like the paper template */}
+                  {Array.from({ length: report.daysInMonth || 0 }, (_, i) => i + 1).map((day) => {
+                    const iso = `${yearMonth}-${String(day).padStart(2, "0")}`;
+                    const dayRow = dayRowByDate.get(iso);
+                    const values = dayRow?.values || {};
+                    const weekday =
+                      values.youbi?.value ?? values.youbi ?? WEEKDAY_JA[new Date(`${iso}T00:00:00`).getDay()];
+                    return (
+                      <tr key={iso}>
+                        <td className={styles.colDay}>{day}</td>
+                        <td className={styles.colWeekday}>{weekday}</td>
+                        <td className={styles.colUketori}>{textWithComment(values.uketori)}</td>
+                        {orderedDailyBody.map((f) => (
+                          <td key={f.field_key} className={groupColClass(styles, FIELD_GROUP[f.field_key])}>
+                            {f.field_type === "checkbox" ? (
+                              isChecked(values[f.field_key]) ? (
+                                <span className={styles.checkMark}>✓</span>
+                              ) : (
+                                ""
+                              )
+                            ) : (
+                              textWithComment(values[f.field_key])
+                            )}
+                          </td>
                         ))}
                       </tr>
-                    </thead>
-                    <tbody>
-                      {report.days.length === 0 ? (
-                        <tr>
-                          <td colSpan={dailyColumns.length + 1} className="text-center text-muted py-4">
-                            この月の記録はまだありません
+                    );
+                  })}
+
+                  {/* 月次報告欄 */}
+                  <tr>
+                    <td colSpan={3 + orderedDailyBody.length} className={styles.sectionBar}>
+                      月次報告欄
+                    </td>
+                  </tr>
+                  <tr className={styles.headerRow}>
+                    <th colSpan={2}>分類</th>
+                    <th colSpan={4}>確認項目</th>
+                    <th colSpan={2}>件数</th>
+                    <th colSpan={commentColSpan}>
+                      報告書コメント欄｜該当するものに✓＋必要時のみ一言
+                    </th>
+                  </tr>
+                  {tallyRowKeys.map(([group, key], idx) => {
+                    const label = dfByKey[key]?.field_label || key;
+                    const count = report.tallies?.[group]?.[key] ?? 0;
+                    const slot = commentRowPlan[idx];
+                    return (
+                      <tr key={key}>
+                        <td className={`${styles.tallyCategory} ${tallyCategoryClass(styles, group)}`} colSpan={2}>
+                          {group}
+                        </td>
+                        <td className={styles.valueCell} colSpan={4}>
+                          {label}
+                        </td>
+                        <td className={styles.tallyCount} colSpan={2}>
+                          {count}
+                        </td>
+                        {slot === "skip" ? null : (
+                          <td
+                            className={styles.commentCell}
+                            colSpan={commentColSpan}
+                            rowSpan={slot ? slot.span : 1}
+                          >
+                            {slot && (
+                              <>
+                                <div style={{ fontWeight: 700, marginBottom: 2 }}>
+                                  {CIRCLED_NUMBERS[slot.block.number - 1] || `${slot.block.number}.`}
+                                  {slot.block.field.field_label}
+                                </div>
+                                <Checklist field={slot.block.field} value={monthlyValues[slot.block.field.field_key]} />
+                                {slot.block.freeTextSuffix && (
+                                  <div className="mt-1">
+                                    {slot.block.freeTextSuffix}：
+                                    {slot.block.freeTextField
+                                      ? textWithComment(monthlyValues[slot.block.freeTextField.field_key])
+                                      : ""}
+                                  </div>
+                                )}
+                              </>
+                            )}
                           </td>
-                        </tr>
-                      ) : (
-                        report.days.map((day: any) => (
-                          <tr key={day.record_date}>
-                            <td className="fw-semibold">{formatDate(day.record_date)}</td>
-                            {dailyColumns.map((f) => (
-                              <td key={f.field_key}>{formatValue(day.values?.[f.field_key])}</td>
-                            ))}
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </Table>
-                </div>
-              </Card.Body>
-            </Card>
+                        )}
+                      </tr>
+                    );
+                  })}
 
-            <Card className="mb-4">
-              <Card.Header>月次集計</Card.Header>
-              <Card.Body>
-                <Row className="g-3">
-                  {Object.entries(report.tallies).map(([group, counts]: [string, any]) => (
-                    <Col md={3} key={group}>
-                      <div
-                        className="rounded-3 p-3 h-100"
-                        style={{ background: "var(--secondary-bg)", border: "1px solid var(--border-color)" }}
-                      >
-                        <div className="fw-semibold mb-2 text-truncate">{group}</div>
-                        {Object.entries(counts).map(([key, count]) => (
-                          <div key={key} className="d-flex justify-content-between align-items-center mb-1">
-                            <span className="text-muted small">{tallyLabel(key)}</span>
-                            <Badge bg="primary" pill>
-                              {String(count)}
-                            </Badge>
-                          </div>
-                        ))}
-                      </div>
-                    </Col>
-                  ))}
-                </Row>
-              </Card.Body>
-            </Card>
+                  {/* 総評 */}
+                  <tr>
+                    <td className={styles.labelCell} colSpan={2}>
+                      総評
+                    </td>
+                    <td className={styles.commentCell} colSpan={totalCols - 2}>
+                      {textWithComment(monthlyValues.sohyo)}
+                    </td>
+                  </tr>
 
-            <Card className="mb-4">
-              <Card.Header>月次報告欄</Card.Header>
-              <Card.Body>
-                {!report.monthlyReport ? (
-                  <div className="text-muted text-center py-3">
-                    この月の月次報告はまだ入力されていません
-                  </div>
-                ) : (
-                  <div className="list-group list-group-flush">
-                    {monthlyOrdered.map((f) => {
-                      const v = report.monthlyReport?.[f.field_key];
-                      if (v === undefined) return null;
-                      return (
-                        <div key={f.field_key} className="list-group-item px-0">
-                          <div className="fw-semibold small text-muted">{f.field_label}</div>
-                          <div>{formatValue(v) || <span className="text-muted">-</span>}</div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </Card.Body>
-            </Card>
-          </>
+                  {/* Footer */}
+                  <tr>
+                    <td className={styles.labelCell} colSpan={2}>
+                      報告日
+                    </td>
+                    <td className={styles.valueCell} colSpan={4}>
+                      {textWithComment(monthlyValues.hokokubi)}
+                    </td>
+                    <td className={styles.labelCell} colSpan={2}>
+                      確認者
+                    </td>
+                    <td className={styles.valueCell} colSpan={3}>
+                      {textWithComment(monthlyValues.kakuninsha)}
+                    </td>
+                    <td className={styles.labelCell} colSpan={3}>
+                      家族・関係機関共有
+                    </td>
+                    <td className={styles.valueCell} colSpan={footerShareColSpan}>
+                      <Checklist field={mfByKey.kyoyu_status} value={monthlyValues.kyoyu_status} />
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </Card.Body>
+          </Card>
         )}
       </Container>
     </Layout>
