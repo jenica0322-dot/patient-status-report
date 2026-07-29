@@ -3,83 +3,30 @@
 // header block -> daily grid (color-coded by group) -> monthly tally table ->
 // numbered report-comment blocks -> 総評 -> footer.
 const ExcelJS = require("exceljs");
+const {
+  TOTAL_COLS,
+  COLORS,
+  GROUP_COLOR: GROUP_COLOR_RGB,
+  FIELD_GROUP,
+  TALLY_GROUPS,
+  WEEKDAY_JA,
+  CIRCLED_NUMBERS,
+  isChecked,
+  rawValue,
+  rawComment,
+  checklistText,
+  textWithComment,
+  buildCommentBlocks,
+} = require("./reportFormat");
 
-const TOTAL_COLS = 17;
-const NAVY = "FF1F2D4A";
-const ORANGE = "FFF2994A";
-const GRAY = "FFE9E9E9";
-const PEACH = "FFFBE0CF";
-const BLUE = "FFD9ECF9";
-const GREEN = "FFDDF0DD";
-const PINK = "FFFBDCE4";
-const YELLOW = "FFFCF1C7";
-const WHITE = "FFFFFFFF";
-
-// Column group -> fill color for the daily grid (mirrors reportController's TALLY_GROUPS,
-// plus the two free-text columns that visually belong to the blue/green groups).
-const GROUP_COLOR = {
-  食事: PEACH,
-  体調: BLUE,
-  支援: GREEN,
-  連絡: PINK,
-};
-const FIELD_GROUP = {
-  kanshoku: "食事",
-  hanbun: "食事",
-  nokoshi: "食事",
-  shokuyoku_teika: "体調",
-  kaoiro_genki: "体調",
-  furatsuki: "体調",
-  taicho_ta: "体調",
-  koekake: "支援",
-  shinbun_yubin: "支援",
-  genkan_anzen: "支援",
-  shien_ta: "支援",
-  ihen_fuzai: "連絡",
-  renraku_you: "連絡",
-};
-
-const TALLY_GROUPS = {
-  食事: ["kanshoku", "hanbun", "nokoshi"],
-  体調: ["shokuyoku_teika", "kaoiro_genki", "furatsuki"],
-  支援: ["koekake", "shinbun_yubin", "genkan_anzen"],
-  連絡: ["ihen_fuzai", "renraku_you"],
-};
-
-const WEEKDAY_JA = ["日", "月", "火", "水", "木", "金", "土"];
-const CIRCLED_NUMBERS = "①②③④⑤⑥⑦⑧⑨";
-
-function isChecked(fieldValue) {
-  if (fieldValue == null) return false;
-  const v = typeof fieldValue === "object" ? fieldValue.value : fieldValue;
-  return v === true || v === "✓" || v === "true";
-}
-
-function rawValue(fieldValue) {
-  if (fieldValue == null) return "";
-  return typeof fieldValue === "object" ? fieldValue.value ?? "" : fieldValue;
-}
-
-function rawComment(fieldValue) {
-  if (fieldValue == null || typeof fieldValue !== "object") return "";
-  return fieldValue.comment || "";
-}
-
-// Preset fields render as a checkbox list ("☑選択肢  ☐他の選択肢 ...") so a single
-// cell shows every option plus which one was picked, same as the source sheet.
-function checklistText(field, fieldValue) {
-  const selected = rawValue(fieldValue);
-  const options = field.phrases?.length ? field.phrases : [];
-  if (!options.length) return String(selected || "");
-  return options.map((opt) => `${opt === selected ? "☑" : "☐"}${opt}`).join("  ");
-}
-
-function textWithComment(fieldValue) {
-  const v = rawValue(fieldValue);
-  const c = rawComment(fieldValue);
-  if (v === "" || v == null) return c ? `（${c}）` : "";
-  return c ? `${v}（${c}）` : String(v);
-}
+// ExcelJS wants ARGB; reportFormat's shared palette is plain RRGGBB.
+const argb = (rgb) => `FF${rgb}`;
+const NAVY = argb(COLORS.NAVY);
+const ORANGE = argb(COLORS.ORANGE);
+const GRAY = argb(COLORS.GRAY);
+const YELLOW = argb(COLORS.YELLOW);
+const WHITE = argb(COLORS.WHITE);
+const GROUP_COLOR = Object.fromEntries(Object.entries(GROUP_COLOR_RGB).map(([k, v]) => [k, argb(v)]));
 
 function styleCell(cell, { bold, size, color, fill, align, valign, wrap, border } = {}) {
   cell.font = { name: "Yu Gothic", size: size || 10, bold: !!bold, color: { argb: color || "FF1A1A1A" } };
@@ -103,33 +50,6 @@ function mergeAndStyle(ws, r1, c1, r2, c2, value, opts) {
   return cell;
 }
 
-// Pairs each preset field with the free-text field that follows it (…_hitokoto / …_naiyo)
-// so numbered comment blocks (①総合評価, ②食事状況…) can be derived from field order
-// instead of being hardcoded — stays correct if fields are edited later.
-function buildCommentBlocks(monthlyFields) {
-  const bodyStart = monthlyFields.findIndex((f) => f.field_key === "sogo_hyoka");
-  const sohyoIdx = monthlyFields.findIndex((f) => f.field_key === "sohyo");
-  const body = bodyStart >= 0 ? monthlyFields.slice(bodyStart, sohyoIdx >= 0 ? sohyoIdx : undefined) : [];
-
-  const blocks = [];
-  let i = 0;
-  let n = 1;
-  while (i < body.length) {
-    const field = body[i];
-    const next = body[i + 1];
-    if (next && next.field_key.startsWith(`${field.field_key}_`) && next.field_type === "text") {
-      const suffix = next.field_label.includes("・") ? next.field_label.split("・").pop() : next.field_label;
-      blocks.push({ number: n, field, freeTextField: next, freeTextSuffix: suffix });
-      i += 2;
-    } else {
-      blocks.push({ number: n, field, freeTextField: null, freeTextSuffix: null });
-      i += 1;
-    }
-    n += 1;
-  }
-  return blocks;
-}
-
 async function buildReportWorkbook({ data, dailyFields, monthlyFields }) {
   const workbook = new ExcelJS.Workbook();
   workbook.creator = "patient-status-report";
@@ -147,8 +67,11 @@ async function buildReportWorkbook({ data, dailyFields, monthlyFields }) {
     views: [{ showGridLines: false }],
   });
 
-  const colWidths = [4, 5, 9, 6, 6, 6, 8, 9, 8, 10, 8, 9, 8, 10, 8, 7, 20];
-  colWidths.forEach((w, idx) => (ws.getColumn(idx + 1).width = w));
+  // All 17 columns share one equal width so the grid reads as a uniform table
+  // (cells with longer text just wrap within the row instead of overflowing).
+  // Note: ExcelJS treats width===9 as its internal "unset" default and silently
+  // drops such columns from the file, so avoid that exact value here.
+  for (let idx = 0; idx < TOTAL_COLS; idx++) ws.getColumn(idx + 1).width = 9.5;
 
   const monthlyValues = data.monthlyReport || {};
   const mfByKey = Object.fromEntries(monthlyFields.map((f) => [f.field_key, f]));

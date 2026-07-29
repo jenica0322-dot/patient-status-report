@@ -135,6 +135,34 @@ const getPatientReport = async (req, res) => {
   }
 };
 
+// Shared by both export endpoints: loads report data plus the field metadata
+// (labels/phrases) needed to render either output format.
+async function loadExportData(patientId, yearMonth) {
+  const [data, dailyFieldsResult, monthlyFieldsResult] = await Promise.all([
+    loadReportData(patientId, yearMonth),
+    primary().query(
+      `SELECT field_key, field_label, field_type, phrases, order_index FROM status_fields
+       WHERE screen_key='daily_status' ORDER BY order_index, field_key`
+    ),
+    primary().query(
+      `SELECT field_key, field_label, field_type, phrases, order_index FROM status_fields
+       WHERE screen_key='monthly_report' ORDER BY order_index, field_key`
+    ),
+  ]);
+
+  const parsePhrases = (p) => {
+    try {
+      return typeof p === "string" ? JSON.parse(p || "[]") : Array.isArray(p) ? p : [];
+    } catch {
+      return [];
+    }
+  };
+  const dailyFields = dailyFieldsResult.rows.map((r) => ({ ...r, phrases: parsePhrases(r.phrases) }));
+  const monthlyFields = monthlyFieldsResult.rows.map((r) => ({ ...r, phrases: parsePhrases(r.phrases) }));
+
+  return { data, dailyFields, monthlyFields };
+}
+
 // GET /api/status-report/export?patient_id=&year_month=YYYY-MM
 // Streams an .xlsx built to match the 状況記録表兼報告書 layout, ready to print.
 const exportPatientReportExcel = async (req, res) => {
@@ -143,27 +171,7 @@ const exportPatientReportExcel = async (req, res) => {
     if (!patient_id || !year_month)
       return res.status(400).json({ error: "patient_id and year_month are required" });
 
-    const [data, dailyFieldsResult, monthlyFieldsResult] = await Promise.all([
-      loadReportData(patient_id, year_month),
-      primary().query(
-        `SELECT field_key, field_label, field_type, phrases, order_index FROM status_fields
-         WHERE screen_key='daily_status' ORDER BY order_index, field_key`
-      ),
-      primary().query(
-        `SELECT field_key, field_label, field_type, phrases, order_index FROM status_fields
-         WHERE screen_key='monthly_report' ORDER BY order_index, field_key`
-      ),
-    ]);
-
-    const parsePhrases = (p) => {
-      try {
-        return typeof p === "string" ? JSON.parse(p || "[]") : Array.isArray(p) ? p : [];
-      } catch {
-        return [];
-      }
-    };
-    const dailyFields = dailyFieldsResult.rows.map((r) => ({ ...r, phrases: parsePhrases(r.phrases) }));
-    const monthlyFields = monthlyFieldsResult.rows.map((r) => ({ ...r, phrases: parsePhrases(r.phrases) }));
+    const { data, dailyFields, monthlyFields } = await loadExportData(patient_id, year_month);
 
     const { buildReportWorkbook } = require("../lib/xlsxReportBuilder");
     const workbook = await buildReportWorkbook({ data, dailyFields, monthlyFields });
@@ -185,4 +193,30 @@ const exportPatientReportExcel = async (req, res) => {
   }
 };
 
-module.exports = { getPatientReport, exportPatientReportExcel };
+// GET /api/status-report/export-pdf?patient_id=&year_month=YYYY-MM
+// Streams a .pdf built to match the same 状況記録表兼報告書 layout as the Excel export.
+const exportPatientReportPdf = async (req, res) => {
+  try {
+    const { patient_id, year_month } = req.query;
+    if (!patient_id || !year_month)
+      return res.status(400).json({ error: "patient_id and year_month are required" });
+
+    const { data, dailyFields, monthlyFields } = await loadExportData(patient_id, year_month);
+
+    const { buildReportPdfBuffer } = require("../lib/pdfReportBuilder");
+    const pdfBuffer = await buildReportPdfBuffer({ data, dailyFields, monthlyFields });
+
+    const fileName = `状況記録表兼報告書_${data.patient.name}_${year_month}.pdf`;
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="report.pdf"; filename*=UTF-8''${encodeURIComponent(fileName)}`
+    );
+    res.send(pdfBuffer);
+  } catch (e) {
+    console.error("exportPatientReportPdf error:", e);
+    res.status(500).json({ error: "internal", detail: e.message });
+  }
+};
+
+module.exports = { getPatientReport, exportPatientReportExcel, exportPatientReportPdf };

@@ -7,7 +7,7 @@ const {
 } = require('../controllers/fieldDataController');
 const { recordData, getStatusRecords } = require('../controllers/recordData');
 const { getPatients, getPatientAreas, savePatient, deletePatient } = require('../controllers/patientController');
-const { getPatientReport, exportPatientReportExcel } = require('../controllers/reportController');
+const { getPatientReport, exportPatientReportExcel, exportPatientReportPdf } = require('../controllers/reportController');
 
 router.get('/status-fields', getStatusFields);
 router.post('/status-fields', saveStatusField);
@@ -23,5 +23,6 @@ router.delete('/patients/:id', deletePatient);
 
 router.get('/status-report', getPatientReport);
 router.get('/status-report/export', exportPatientReportExcel);
+router.get('/status-report/export-pdf', exportPatientReportPdf);
 
 module.exports = router;

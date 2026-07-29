@@ -148,6 +148,10 @@ export function patientReportExportUrl(patientId: number, yearMonth: string) {
   return `${API_BASE}/api/status-report/export?patient_id=${patientId}&year_month=${encodeURIComponent(yearMonth)}`;
 }
 
+export function patientReportExportPdfUrl(patientId: number, yearMonth: string) {
+  return `${API_BASE}/api/status-report/export-pdf?patient_id=${patientId}&year_month=${encodeURIComponent(yearMonth)}`;
+}
+
 // ===== Report =====
 export async function fetchPatientReport(patientId: number, yearMonth: string) {
   const r = await fetch(

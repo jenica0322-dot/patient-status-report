@@ -4,7 +4,7 @@
 
 import { useEffect, useState, useMemo } from "react";
 import { Container, Row, Col, Card, Form, Spinner, Alert, Button } from "react-bootstrap";
-import { FileText, Calendar, FileEarmarkExcel } from "react-bootstrap-icons";
+import { FileText, Calendar, FileEarmarkExcel, FileEarmarkPdf } from "react-bootstrap-icons";
 import Link from "next/link";
 import Layout from "../components/layout/Layout";
 import { JaMonthInput } from "../components/JaDatePicker";
@@ -13,6 +13,7 @@ import {
   fetchStatusFields,
   fetchPatientReport,
   patientReportExportUrl,
+  patientReportExportPdfUrl,
 } from "../lib/statusApi";
 import {
   ReportField,
@@ -189,13 +190,22 @@ export default function ReportPage() {
               </Col>
               <Col md={3} className="text-md-end">
                 {patientId && (
-                  <a
-                    className="btn btn-success"
-                    href={patientReportExportUrl(patientId, yearMonth)}
-                  >
-                    <FileEarmarkExcel className="me-2" />
-                    Excel印刷
-                  </a>
+                  <div className="d-flex gap-2 justify-content-md-end">
+                    <a
+                      className="btn btn-success btn-sm text-nowrap"
+                      href={patientReportExportUrl(patientId, yearMonth)}
+                    >
+                      <FileEarmarkExcel className="me-1" />
+                      Excel印刷
+                    </a>
+                    <a
+                      className="btn btn-danger btn-sm text-nowrap"
+                      href={patientReportExportPdfUrl(patientId, yearMonth)}
+                    >
+                      <FileEarmarkPdf className="me-1" />
+                      PDF印刷
+                    </a>
+                  </div>
                 )}
               </Col>
             </Row>
