@@ -11,6 +11,7 @@ import {
 } from "@/app/lib/statusApi";
 import { usePatient } from "@/app/context/PatientContext";
 import { JaDateInput, JaMonthInput } from "@/app/components/JaDatePicker";
+import PatientSelector from "@/app/components/dashboard/PatientSelector";
 
 declare global {
   interface Window {
@@ -404,12 +405,16 @@ export default function StatusMatcher() {
       .catch(() => setStatusMsg("❌ 保存に失敗しました"));
   };
 
-  if (!selectedPatient) {
-    return null;
-  }
-
   return (
     <div className={styles.wrapper}>
+      <PatientSelector />
+
+      {!selectedPatient ? (
+        <div className={styles.targetBox} style={{ textAlign: "center", color: "var(--secondary-text)" }}>
+          上の「対象利用者」から利用者を選択すると、状況入力を開始できます。
+        </div>
+      ) : (
+        <>
       {/* Screen + date/month scope */}
       <div className={styles.scopeBar}>
         <div className="d-flex gap-2">
@@ -635,6 +640,8 @@ export default function StatusMatcher() {
           )}
         </div>
       </div>
+        </>
+      )}
     </div>
   );
 }

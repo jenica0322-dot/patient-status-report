@@ -9,7 +9,6 @@ import {
   BoxArrowRight,
   ChevronLeft,
   ChevronRight,
-  PersonLinesFill,
   MicFill,
   FileText,
   GearFill,
@@ -25,7 +24,6 @@ type SideBarProps = {
 };
 
 const NAV_ITEMS = [
-  { href: "/patients", label: "利用者選択", icon: PersonLinesFill },
   { href: "/", label: "状況入力", icon: MicFill },
   { href: "/report", label: "報告書", icon: FileText },
   { href: "/registerfield", label: "マスター", icon: GearFill },
