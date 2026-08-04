@@ -139,7 +139,6 @@ export default function StatusMatcher() {
   const [patientVoiceRequestId, setPatientVoiceRequestId] = useState(0);
 
   const recognitionRef = useRef<any>(null);
-  const streamRef = useRef<MediaStream | null>(null);
   const isListeningRef = useRef(false);
   const lastFinalRef = useRef<string>("");
   const focusKeyRef = useRef<string>("");
@@ -190,13 +189,7 @@ export default function StatusMatcher() {
     setManualText(String(values[focusKey]?.value ?? ""));
   }, [focusKey]);
 
-  useEffect(
-    () => () => {
-      recognitionRef.current?.stop();
-      streamRef.current?.getTracks()?.forEach((t) => t.stop());
-    },
-    []
-  );
+  useEffect(() => () => recognitionRef.current?.stop(), []);
 
   const logUtter = (text: string) => {
     setSpokenLog([{ text, at: Date.now() }]);
@@ -212,9 +205,6 @@ export default function StatusMatcher() {
     setMatches([]);
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      streamRef.current = stream;
-
       const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
       recognitionRef.current = new SR();
       const rec = recognitionRef.current;
@@ -243,19 +233,25 @@ export default function StatusMatcher() {
       };
       rec.onerror = (ev: any) => {
         console.warn("Speech error:", ev?.error);
+        // "no-speech" fires routinely during pauses; onend already restarts listening, so ignore it.
+        if (ev?.error === "no-speech" || ev?.error === "aborted") return;
+
+        const ERROR_MESSAGES: Record<string, string> = {
+          "not-allowed": "マイクへのアクセスが拒否されました。ブラウザのサイト設定で許可してください。",
+          "service-not-allowed": "マイクへのアクセスが拒否されました。ブラウザのサイト設定で許可してください。",
+          "audio-capture": "マイクを利用できませんでした。他のアプリがマイクを使用していないか確認してください。",
+          network: "音声認識サーバーに接続できませんでした。ネットワーク接続を確認してください。",
+        };
         stopAll();
+        setStatusMsg(`❌ ${ERROR_MESSAGES[ev?.error] || "音声認識でエラーが発生しました"}`);
       };
 
       rec.start();
       setIsListening(true);
       isListeningRef.current = true;
     } catch (err: any) {
-      console.error("getUserMedia error:", err?.name, err);
-      if (err?.name === "NotAllowedError")
-        alert("マイクへのアクセスが拒否されました。ブラウザのサイト設定で許可してください。");
-      else if (err?.name === "NotReadableError")
-        alert("マイクが他のアプリで使用中の可能性があります。");
-      else alert("マイクを開始できませんでした。");
+      console.error("SpeechRecognition start error:", err);
+      alert("マイクを開始できませんでした。");
       stopAll();
     }
   };
@@ -268,14 +264,6 @@ export default function StatusMatcher() {
         try {
           recognitionRef.current.stop();
         } catch {}
-      }
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach((t) => {
-          try {
-            t.stop();
-          } catch {}
-        });
-        streamRef.current = null;
       }
     } finally {
       isListeningRef.current = false;
@@ -435,163 +423,162 @@ export default function StatusMatcher() {
 
   return (
     <div className={styles.wrapper}>
-      <PatientSelector
-        externalVoiceText={patientVoiceText}
-        externalVoiceRequestId={patientVoiceRequestId}
-        onExternalVoiceResult={({ matched, message }) => {
-          setStatusMsg(matched ? `✅ ${message}` : `❌ ${message}`);
-        }}
-      />
-
-      {!selectedPatient && (
-        <div className={styles.targetBox} style={{ textAlign: "center", color: "var(--secondary-text)" }}>
-          マイクで利用者名・ふりがな・pat_id を話すか、上の「対象利用者」から選択してください。
+      {selectedPatient && (
+        <div className={styles.scopeBar}>
+          <div className="d-flex gap-2">
+            {SCREENS.map((s) => (
+              <button
+                key={s.key}
+                type="button"
+                className={`btn btn-sm ${screenKey === s.key ? "btn-primary" : "btn-outline-primary"}`}
+                onClick={() => setScreenKey(s.key)}
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
+          {screenKey === "daily_status" ? (
+            <JaDateInput
+              className="form-control form-control-sm"
+              value={recordDate}
+              onChange={setRecordDate}
+            />
+          ) : (
+            <JaMonthInput
+              className="form-control form-control-sm"
+              value={yearMonth}
+              onChange={setYearMonth}
+            />
+          )}
+          <button type="button" className="btn btn-sm btn-success ms-auto" onClick={handleSaveRecord}>
+            保存
+          </button>
         </div>
       )}
-
-      {selectedPatient && (
-        <>
-      {/* Screen + date/month scope */}
-      <div className={styles.scopeBar}>
-        <div className="d-flex gap-2">
-          {SCREENS.map((s) => (
-            <button
-              key={s.key}
-              type="button"
-              className={`btn btn-sm ${screenKey === s.key ? "btn-primary" : "btn-outline-primary"}`}
-              onClick={() => setScreenKey(s.key)}
-            >
-              {s.label}
-            </button>
-          ))}
-        </div>
-        {screenKey === "daily_status" ? (
-          <JaDateInput
-            className="form-control form-control-sm"
-            value={recordDate}
-            onChange={setRecordDate}
-          />
-        ) : (
-          <JaMonthInput
-            className="form-control form-control-sm"
-            value={yearMonth}
-            onChange={setYearMonth}
-          />
-        )}
-        <button type="button" className="btn btn-sm btn-success ms-auto" onClick={handleSaveRecord}>
-          保存
-        </button>
-      </div>
 
       <div className={styles.targetBox}>
-        <label>対象フィールド</label>
-        <select
-          className={styles.presetSelect}
-          value={focusKey}
-          onChange={(e) => setFocusKey(e.target.value)}
-        >
-          {fields.map((f) => (
-            <option key={f.field_key} value={f.field_key}>
-              {f.field_label}
-            </option>
-          ))}
-        </select>
+        <PatientSelector
+          externalVoiceText={patientVoiceText}
+          externalVoiceRequestId={patientVoiceRequestId}
+          onExternalVoiceResult={({ matched, message }) => {
+            setStatusMsg(matched ? `✅ ${message}` : `❌ ${message}`);
+          }}
+        />
 
-        <label style={{ marginTop: 10 }}>現在の値</label>
-        <p>
-          {focusKey ? JSON.stringify(values[focusKey]?.value ?? "", null, 0) : "---"}
-        </p>
+        {!selectedPatient ? (
+          <p style={{ textAlign: "center", color: "var(--secondary-text)", marginTop: "1.25rem", marginBottom: 0 }}>
+            マイクで利用者名・ふりがな・pat_id を話すか、上のリストから選択してください。
+          </p>
+        ) : (
+          <div style={{ marginTop: "1.5rem" }}>
+            <label>対象フィールド</label>
+            <select
+              className={styles.presetSelect}
+              value={focusKey}
+              onChange={(e) => setFocusKey(e.target.value)}
+            >
+              {fields.map((f) => (
+                <option key={f.field_key} value={f.field_key}>
+                  {f.field_label}
+                </option>
+              ))}
+            </select>
 
-        {/* Manual input, in addition to voice */}
-        {focusField && focusField.field_type === "checkbox" && (
-          <div
-            className={`${styles.checkboxToggle} ${
-              values[focusField.field_key]?.value === true ? styles.checked : ""
-            }`}
-            onClick={() =>
-              setFieldValue(focusField.field_key, !(values[focusField.field_key]?.value === true))
-            }
-          >
-            {values[focusField.field_key]?.value === true ? (
-              <CheckCircleFill />
-            ) : (
-              <Circle />
-            )}
-            {values[focusField.field_key]?.value === true ? "チェック済み" : "未チェック（クリックでチェック）"}
-          </div>
-        )}
+            <label style={{ marginTop: 10 }}>現在の値</label>
+            <p>
+              {focusKey ? JSON.stringify(values[focusKey]?.value ?? "", null, 0) : "---"}
+            </p>
 
-        {focusField && focusField.field_type === "preset" && focusField.phrases?.length > 0 && (
-          <div className="card border-0 shadow-sm rounded-4 mt-3">
-            <div className="card-body">
-              <h6 className="card-title d-flex align-items-center mb-3">
-                <span className="badge bg-primary me-2 rounded-pill">🎯</span>
-                {focusField.field_label} の候補（クリックで選択、{focusField.phrases.length}件）
-              </h6>
-              <div className="list-group list-group-flush">
-                {focusField.phrases.map((p) => {
-                  const isSelected = values[focusField.field_key]?.value === p;
-                  return (
-                    <button
-                      key={p}
-                      type="button"
-                      className="list-group-item list-group-item-action border-0 px-0 py-2 d-flex align-items-center bg-transparent"
-                      onClick={() => setFieldValue(focusField.field_key, p)}
-                    >
-                      <span
-                        className={`badge ${isSelected ? "bg-success" : "bg-light text-dark"} me-3 rounded-pill`}
-                      >
-                        {isSelected ? "✅" : "・"}
-                      </span>
-                      <span className={`fw-medium ${isSelected ? "text-success" : ""}`}>{p}</span>
-                    </button>
-                  );
-                })}
+            {/* Manual input, in addition to voice */}
+            {focusField && focusField.field_type === "checkbox" && (
+              <div
+                className={`${styles.checkboxToggle} ${
+                  values[focusField.field_key]?.value === true ? styles.checked : ""
+                }`}
+                onClick={() =>
+                  setFieldValue(focusField.field_key, !(values[focusField.field_key]?.value === true))
+                }
+              >
+                {values[focusField.field_key]?.value === true ? (
+                  <CheckCircleFill />
+                ) : (
+                  <Circle />
+                )}
+                {values[focusField.field_key]?.value === true ? "チェック済み" : "未チェック（クリックでチェック）"}
               </div>
-            </div>
-          </div>
-        )}
+            )}
 
-        {focusField && focusField.field_type === "text" && (
-          <div className="mt-3">
-            <label className="form-label fw-semibold text-muted text-uppercase small mb-2">
-              値（手入力）
-            </label>
-            <textarea
-              className="form-control border-0 shadow-sm rounded-3"
-              rows={2}
-              value={manualText}
-              onChange={(e) => {
-                setManualText(e.target.value);
-                setFieldValue(focusField.field_key, e.target.value);
-              }}
-            />
-          </div>
-        )}
+            {focusField && focusField.field_type === "preset" && focusField.phrases?.length > 0 && (
+              <div className="card border-0 shadow-sm rounded-4 mt-3">
+                <div className="card-body">
+                  <h6 className="card-title d-flex align-items-center mb-3">
+                    <span className="badge bg-primary me-2 rounded-pill">🎯</span>
+                    {focusField.field_label} の候補（クリックで選択、{focusField.phrases.length}件）
+                  </h6>
+                  <div className="list-group list-group-flush">
+                    {focusField.phrases.map((p) => {
+                      const isSelected = values[focusField.field_key]?.value === p;
+                      return (
+                        <button
+                          key={p}
+                          type="button"
+                          className="list-group-item list-group-item-action border-0 px-0 py-2 d-flex align-items-center bg-transparent"
+                          onClick={() => setFieldValue(focusField.field_key, p)}
+                        >
+                          <span
+                            className={`badge ${isSelected ? "bg-success" : "bg-light text-dark"} me-3 rounded-pill`}
+                          >
+                            {isSelected ? "✅" : "・"}
+                          </span>
+                          <span className={`fw-medium ${isSelected ? "text-success" : ""}`}>{p}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
 
-        {focusField && (
-          <div className="mt-3">
-            <label className="form-label fw-semibold text-muted text-uppercase small mb-2">
-              コメント（自由入力）
-            </label>
-            <textarea
-              className="form-control border-0 shadow-sm rounded-3"
-              rows={2}
-              placeholder="ここに意見や補足を入力できます（または「コメント〜」と話してください）"
-              value={values[focusField.field_key]?.comment ?? ""}
-              onChange={(e) => {
-                const text = e.target.value;
-                setValues((prev) => ({
-                  ...prev,
-                  [focusField.field_key]: { ...(prev[focusField.field_key] || {}), comment: text },
-                }));
-              }}
-            />
+            {focusField && focusField.field_type === "text" && (
+              <div className="mt-3">
+                <label className="form-label fw-semibold text-muted text-uppercase small mb-2">
+                  値（手入力）
+                </label>
+                <textarea
+                  className="form-control border-0 shadow-sm rounded-3"
+                  rows={2}
+                  value={manualText}
+                  onChange={(e) => {
+                    setManualText(e.target.value);
+                    setFieldValue(focusField.field_key, e.target.value);
+                  }}
+                />
+              </div>
+            )}
+
+            {focusField && (
+              <div className="mt-3">
+                <label className="form-label fw-semibold text-muted text-uppercase small mb-2">
+                  コメント（自由入力）
+                </label>
+                <textarea
+                  className="form-control border-0 shadow-sm rounded-3"
+                  rows={2}
+                  placeholder="ここに意見や補足を入力できます（または「コメント〜」と話してください）"
+                  value={values[focusField.field_key]?.comment ?? ""}
+                  onChange={(e) => {
+                    const text = e.target.value;
+                    setValues((prev) => ({
+                      ...prev,
+                      [focusField.field_key]: { ...(prev[focusField.field_key] || {}), comment: text },
+                    }));
+                  }}
+                />
+              </div>
+            )}
           </div>
         )}
       </div>
-        </>
-      )}
 
       <div className={styles.transcriptBox}>
         {transcript ? (
