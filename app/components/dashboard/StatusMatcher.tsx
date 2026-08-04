@@ -89,6 +89,7 @@ function bestFieldMatch(utterance: string, fields: Field[]): Field | null {
 
 const AFFIRMATIVE = /^(よし|した|できた|チェック|レ|まる|○|✓|ok|オーケー)$/;
 const NEGATIVE = /^(なし|しない|できていない|ばつ|×|no)$/;
+const PATIENT_SELECT_FIELD_LABEL = "利用者選択";
 
 async function canRecordMic() {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -143,6 +144,7 @@ export default function StatusMatcher() {
   const lastFinalRef = useRef<string>("");
   const focusKeyRef = useRef<string>("");
   const valuesRef = useRef<Record<string, { value?: any; comment?: string }>>({});
+  const patientFieldVoiceKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
     focusKeyRef.current = focusKey;
@@ -335,8 +337,10 @@ export default function StatusMatcher() {
     const patientVoiceMatch = rawFinal.match(
       /^(利用者|患者|patient|patid|pat_id)\s*[:：]?\s*(.+)$/i
     );
+    const currentFocusField = fields.find((f) => f.field_key === focusKeyRef.current);
+    const isPatientSelectFieldFocused = currentFocusField?.field_label === PATIENT_SELECT_FIELD_LABEL;
     const impliedPatientShortcut = !selectedPatient && isLikelyPatientShortcut(rawFinal);
-    if (patientVoiceMatch || impliedPatientShortcut) {
+    if (patientVoiceMatch || impliedPatientShortcut || isPatientSelectFieldFocused) {
       const patientText = patientVoiceMatch
         ? patientVoiceMatch[2]?.trim() ?? ""
         : rawFinal.trim();
@@ -344,6 +348,8 @@ export default function StatusMatcher() {
         setStatusMsg("利用者を指定してください（例: やまだたろう / 12345）");
         return;
       }
+      // Only the "利用者選択" field wires the matched patient back into its own value.
+      patientFieldVoiceKeyRef.current = isPatientSelectFieldFocused ? focusKeyRef.current : null;
       setPatientVoiceText(patientText);
       setPatientVoiceRequestId((id) => id + 1);
       setStatusMsg(`利用者検索: ${patientText}`);
@@ -460,8 +466,13 @@ export default function StatusMatcher() {
         <PatientSelector
           externalVoiceText={patientVoiceText}
           externalVoiceRequestId={patientVoiceRequestId}
-          onExternalVoiceResult={({ matched, message }) => {
+          onExternalVoiceResult={({ matched, message, patient }) => {
             setStatusMsg(matched ? `✅ ${message}` : `❌ ${message}`);
+            const fieldKey = patientFieldVoiceKeyRef.current;
+            if (fieldKey) {
+              patientFieldVoiceKeyRef.current = null;
+              if (matched && patient) setFieldValue(fieldKey, patient.name);
+            }
           }}
         />
 

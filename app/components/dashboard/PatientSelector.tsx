@@ -68,7 +68,7 @@ function findBestPatientMatchWithScore(patients: Patient[], spoken: string) {
 type PatientSelectorProps = {
   externalVoiceText?: string;
   externalVoiceRequestId?: number;
-  onExternalVoiceResult?: (result: { matched: boolean; message: string }) => void;
+  onExternalVoiceResult?: (result: { matched: boolean; message: string; patient?: Patient }) => void;
 };
 
 export default function PatientSelector({
@@ -175,7 +175,7 @@ export default function PatientSelector({
     selectPatient(p);
     setOpen(false);
     setVoiceStatus(`${p.name} を選択しました`);
-    onExternalVoiceResult?.({ matched: true, message: `${p.name} を選択しました` });
+    onExternalVoiceResult?.({ matched: true, message: `${p.name} を選択しました`, patient: p });
   };
 
   const trySelectByVoiceText = async (spokenRaw: string) => {
