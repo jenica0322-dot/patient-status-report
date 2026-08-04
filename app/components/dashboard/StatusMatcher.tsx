@@ -186,6 +186,7 @@ export default function StatusMatcher() {
     () => fields.find((f) => f.field_key === focusKey),
     [fields, focusKey]
   );
+  const isPatientSelectField = focusField?.field_label === PATIENT_SELECT_FIELD_LABEL;
 
   useEffect(() => {
     setManualText(String(values[focusKey]?.value ?? ""));
@@ -334,6 +335,19 @@ export default function StatusMatcher() {
       return;
     }
 
+    // Switching the Target Field by voice takes priority over any other interpretation,
+    // so saying a field name always jumps there — even while parked on "利用者選択"
+    // (which would otherwise swallow every utterance as a patient search).
+    const matchedField = bestFieldMatch(rawFinal, fields);
+    if (matchedField && matchedField.field_key !== focusKeyRef.current) {
+      setFocusKey(matchedField.field_key);
+      focusKeyRef.current = matchedField.field_key;
+      setStatusMsg(`➡ ${matchedField.field_label} に切り替えました`);
+      setMatchStatus("none");
+      setMatches([]);
+      return;
+    }
+
     const patientVoiceMatch = rawFinal.match(
       /^(利用者|患者|patient|patid|pat_id)\s*[:：]?\s*(.+)$/i
     );
@@ -353,16 +367,6 @@ export default function StatusMatcher() {
       setPatientVoiceText(patientText);
       setPatientVoiceRequestId((id) => id + 1);
       setStatusMsg(`利用者検索: ${patientText}`);
-      return;
-    }
-
-    const matchedField = bestFieldMatch(rawFinal, fields);
-    if (matchedField) {
-      setFocusKey(matchedField.field_key);
-      focusKeyRef.current = matchedField.field_key;
-      setStatusMsg(`➡ ${matchedField.field_label} に切り替えました`);
-      setMatchStatus("none");
-      setMatches([]);
       return;
     }
 
@@ -466,6 +470,7 @@ export default function StatusMatcher() {
         <PatientSelector
           externalVoiceText={patientVoiceText}
           externalVoiceRequestId={patientVoiceRequestId}
+          locked={!isPatientSelectField}
           onExternalVoiceResult={({ matched, message, patient }) => {
             setStatusMsg(matched ? `✅ ${message}` : `❌ ${message}`);
             const fieldKey = patientFieldVoiceKeyRef.current;
@@ -495,97 +500,101 @@ export default function StatusMatcher() {
               ))}
             </select>
 
-            <label style={{ marginTop: 10 }}>現在の値</label>
-            <p>
-              {focusKey ? JSON.stringify(values[focusKey]?.value ?? "", null, 0) : "---"}
-            </p>
+            {!isPatientSelectField && (
+              <>
+                <label style={{ marginTop: 10 }}>現在の値</label>
+                <p>
+                  {focusKey ? JSON.stringify(values[focusKey]?.value ?? "", null, 0) : "---"}
+                </p>
 
-            {/* Manual input, in addition to voice */}
-            {focusField && focusField.field_type === "checkbox" && (
-              <div
-                className={`${styles.checkboxToggle} ${
-                  values[focusField.field_key]?.value === true ? styles.checked : ""
-                }`}
-                onClick={() =>
-                  setFieldValue(focusField.field_key, !(values[focusField.field_key]?.value === true))
-                }
-              >
-                {values[focusField.field_key]?.value === true ? (
-                  <CheckCircleFill />
-                ) : (
-                  <Circle />
-                )}
-                {values[focusField.field_key]?.value === true ? "チェック済み" : "未チェック（クリックでチェック）"}
-              </div>
-            )}
-
-            {focusField && focusField.field_type === "preset" && focusField.phrases?.length > 0 && (
-              <div className="card border-0 shadow-sm rounded-4 mt-3">
-                <div className="card-body">
-                  <h6 className="card-title d-flex align-items-center mb-3">
-                    <span className="badge bg-primary me-2 rounded-pill">🎯</span>
-                    {focusField.field_label} の候補（クリックで選択、{focusField.phrases.length}件）
-                  </h6>
-                  <div className="list-group list-group-flush">
-                    {focusField.phrases.map((p) => {
-                      const isSelected = values[focusField.field_key]?.value === p;
-                      return (
-                        <button
-                          key={p}
-                          type="button"
-                          className="list-group-item list-group-item-action border-0 px-0 py-2 d-flex align-items-center bg-transparent"
-                          onClick={() => setFieldValue(focusField.field_key, p)}
-                        >
-                          <span
-                            className={`badge ${isSelected ? "bg-success" : "bg-light text-dark"} me-3 rounded-pill`}
-                          >
-                            {isSelected ? "✅" : "・"}
-                          </span>
-                          <span className={`fw-medium ${isSelected ? "text-success" : ""}`}>{p}</span>
-                        </button>
-                      );
-                    })}
+                {/* Manual input, in addition to voice */}
+                {focusField && focusField.field_type === "checkbox" && (
+                  <div
+                    className={`${styles.checkboxToggle} ${
+                      values[focusField.field_key]?.value === true ? styles.checked : ""
+                    }`}
+                    onClick={() =>
+                      setFieldValue(focusField.field_key, !(values[focusField.field_key]?.value === true))
+                    }
+                  >
+                    {values[focusField.field_key]?.value === true ? (
+                      <CheckCircleFill />
+                    ) : (
+                      <Circle />
+                    )}
+                    {values[focusField.field_key]?.value === true ? "チェック済み" : "未チェック（クリックでチェック）"}
                   </div>
-                </div>
-              </div>
-            )}
+                )}
 
-            {focusField && focusField.field_type === "text" && (
-              <div className="mt-3">
-                <label className="form-label fw-semibold text-muted text-uppercase small mb-2">
-                  値（手入力）
-                </label>
-                <textarea
-                  className="form-control border-0 shadow-sm rounded-3"
-                  rows={2}
-                  value={manualText}
-                  onChange={(e) => {
-                    setManualText(e.target.value);
-                    setFieldValue(focusField.field_key, e.target.value);
-                  }}
-                />
-              </div>
-            )}
+                {focusField && focusField.field_type === "preset" && focusField.phrases?.length > 0 && (
+                  <div className="card border-0 shadow-sm rounded-4 mt-3">
+                    <div className="card-body">
+                      <h6 className="card-title d-flex align-items-center mb-3">
+                        <span className="badge bg-primary me-2 rounded-pill">🎯</span>
+                        {focusField.field_label} の候補（クリックで選択、{focusField.phrases.length}件）
+                      </h6>
+                      <div className="list-group list-group-flush">
+                        {focusField.phrases.map((p) => {
+                          const isSelected = values[focusField.field_key]?.value === p;
+                          return (
+                            <button
+                              key={p}
+                              type="button"
+                              className="list-group-item list-group-item-action border-0 px-0 py-2 d-flex align-items-center bg-transparent"
+                              onClick={() => setFieldValue(focusField.field_key, p)}
+                            >
+                              <span
+                                className={`badge ${isSelected ? "bg-success" : "bg-light text-dark"} me-3 rounded-pill`}
+                              >
+                                {isSelected ? "✅" : "・"}
+                              </span>
+                              <span className={`fw-medium ${isSelected ? "text-success" : ""}`}>{p}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                )}
 
-            {focusField && (
-              <div className="mt-3">
-                <label className="form-label fw-semibold text-muted text-uppercase small mb-2">
-                  コメント（自由入力）
-                </label>
-                <textarea
-                  className="form-control border-0 shadow-sm rounded-3"
-                  rows={2}
-                  placeholder="ここに意見や補足を入力できます（または「コメント〜」と話してください）"
-                  value={values[focusField.field_key]?.comment ?? ""}
-                  onChange={(e) => {
-                    const text = e.target.value;
-                    setValues((prev) => ({
-                      ...prev,
-                      [focusField.field_key]: { ...(prev[focusField.field_key] || {}), comment: text },
-                    }));
-                  }}
-                />
-              </div>
+                {focusField && focusField.field_type === "text" && (
+                  <div className="mt-3">
+                    <label className="form-label fw-semibold text-muted text-uppercase small mb-2">
+                      値（手入力）
+                    </label>
+                    <textarea
+                      className="form-control border-0 shadow-sm rounded-3"
+                      rows={2}
+                      value={manualText}
+                      onChange={(e) => {
+                        setManualText(e.target.value);
+                        setFieldValue(focusField.field_key, e.target.value);
+                      }}
+                    />
+                  </div>
+                )}
+
+                {focusField && (
+                  <div className="mt-3">
+                    <label className="form-label fw-semibold text-muted text-uppercase small mb-2">
+                      コメント（自由入力）
+                    </label>
+                    <textarea
+                      className="form-control border-0 shadow-sm rounded-3"
+                      rows={2}
+                      placeholder="ここに意見や補足を入力できます（または「コメント〜」と話してください）"
+                      value={values[focusField.field_key]?.comment ?? ""}
+                      onChange={(e) => {
+                        const text = e.target.value;
+                        setValues((prev) => ({
+                          ...prev,
+                          [focusField.field_key]: { ...(prev[focusField.field_key] || {}), comment: text },
+                        }));
+                      }}
+                    />
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}

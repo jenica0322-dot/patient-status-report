@@ -31,6 +31,8 @@ import {
 } from "../lib/reportFormat";
 import styles from "../styles/MonthlyReportGrid.module.css";
 
+const PATIENT_SELECT_FIELD_LABEL = "利用者選択";
+
 function currentYearMonth() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
@@ -101,7 +103,12 @@ export default function ReportPage() {
   const orderedDailyBody = useMemo(
     () =>
       dailyFields
-        .filter((f) => f.field_key !== "youbi" && f.field_key !== "uketori")
+        .filter(
+          (f) =>
+            f.field_key !== "youbi" &&
+            f.field_key !== "uketori" &&
+            f.field_label !== PATIENT_SELECT_FIELD_LABEL
+        )
         .sort((a, b) => a.order_index - b.order_index),
     [dailyFields]
   );

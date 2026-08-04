@@ -69,12 +69,14 @@ type PatientSelectorProps = {
   externalVoiceText?: string;
   externalVoiceRequestId?: number;
   onExternalVoiceResult?: (result: { matched: boolean; message: string; patient?: Patient }) => void;
+  locked?: boolean;
 };
 
 export default function PatientSelector({
   externalVoiceText,
   externalVoiceRequestId,
   onExternalVoiceResult,
+  locked = false,
 }: PatientSelectorProps) {
   const { selectedPatient, selectPatient } = usePatient();
 
@@ -240,10 +242,20 @@ export default function PatientSelector({
     void trySelectByVoiceText(externalVoiceText);
   }, [externalVoiceRequestId, externalVoiceText]);
 
+  useEffect(() => {
+    if (locked) setOpen(false);
+  }, [locked]);
+
   return (
     <div className={styles.wrapper} ref={containerRef}>
       <label className={styles.label}>対象利用者</label>
-      <button type="button" className={styles.trigger} onClick={() => setOpen((v) => !v)}>
+      <button
+        type="button"
+        className={`${styles.trigger} ${locked ? styles.triggerLocked : ""}`}
+        onClick={() => !locked && setOpen((v) => !v)}
+        disabled={locked}
+        title={locked ? "対象フィールドを「利用者選択」にすると変更できます" : undefined}
+      >
         <PersonCircle size={18} />
         <span className={styles.triggerText}>
           {selectedPatient ? selectedPatient.name : "利用者を選択してください"}
@@ -251,7 +263,7 @@ export default function PatientSelector({
         <ChevronDown size={14} className={`${styles.chevron} ${open ? styles.chevronOpen : ""}`} />
       </button>
 
-      {open && (
+      {open && !locked && (
         <div className={styles.panel}>
           <div className={styles.filters}>
             <div className={styles.searchBox}>

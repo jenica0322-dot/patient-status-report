@@ -3,6 +3,10 @@
 // Colors are plain RRGGBB; each builder adapts them to its own color format.
 const TOTAL_COLS = 17;
 
+// UI-only helper field (switches the voice-input focus to the patient picker) — not
+// part of the printed template, so exports drop it the same way the on-screen grid does.
+const PATIENT_SELECT_FIELD_LABEL = "利用者選択";
+
 const COLORS = {
   NAVY: "1F2D4A",
   ORANGE: "F2994A",
@@ -111,6 +115,7 @@ function buildCommentBlocks(monthlyFields) {
 
 module.exports = {
   TOTAL_COLS,
+  PATIENT_SELECT_FIELD_LABEL,
   COLORS,
   GROUP_COLOR,
   FIELD_GROUP,

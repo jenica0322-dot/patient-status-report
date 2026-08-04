@@ -5,6 +5,7 @@
 const ExcelJS = require("exceljs");
 const {
   TOTAL_COLS,
+  PATIENT_SELECT_FIELD_LABEL,
   COLORS,
   GROUP_COLOR: GROUP_COLOR_RGB,
   FIELD_GROUP,
@@ -77,7 +78,12 @@ async function buildReportWorkbook({ data, dailyFields, monthlyFields }) {
   const mfByKey = Object.fromEntries(monthlyFields.map((f) => [f.field_key, f]));
   const dfByKey = Object.fromEntries(dailyFields.map((f) => [f.field_key, f]));
   const orderedDailyBody = dailyFields
-    .filter((f) => f.field_key !== "youbi" && f.field_key !== "uketori")
+    .filter(
+      (f) =>
+        f.field_key !== "youbi" &&
+        f.field_key !== "uketori" &&
+        f.field_label !== PATIENT_SELECT_FIELD_LABEL
+    )
     .sort((a, b) => a.order_index - b.order_index);
 
   let row = 1;

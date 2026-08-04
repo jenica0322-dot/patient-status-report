@@ -36,6 +36,16 @@
   border-color: var(--primary-blue-hover);
 }
 
+.triggerLocked {
+  cursor: not-allowed;
+  opacity: 0.65;
+  background: var(--secondary-bg);
+}
+
+.triggerLocked:hover {
+  border-color: var(--border-color);
+}
+
 .triggerText {
   flex: 1;
   text-align: left;
