@@ -67,6 +67,14 @@ const normalizeJa = (t: string) =>
     .replace(/[．。､,，]/g, ".")
     .replace(/[０-９]/g, (d) => String.fromCharCode(d.charCodeAt(0) - 0xfee0));
 
+function isLikelyPatientShortcut(text: string) {
+  const normalized = normalizeJa(text);
+  if (!normalized) return false;
+  if (/^[0-9]{2,}$/.test(normalized)) return true;
+  if (/^[ぁ-んー]{2,}$/.test(normalized)) return true;
+  return false;
+}
+
 function bestFieldMatch(utterance: string, fields: Field[]): Field | null {
   const cleaned = normalizeJa(utterance);
   let best: { f: Field; score: number } | null = null;
@@ -127,6 +135,8 @@ export default function StatusMatcher() {
   const [matches, setMatches] = useState<Match[]>([]);
   const [spokenLog, setSpokenLog] = useState<SpokenItem[]>([]);
   const [manualText, setManualText] = useState("");
+  const [patientVoiceText, setPatientVoiceText] = useState("");
+  const [patientVoiceRequestId, setPatientVoiceRequestId] = useState(0);
 
   const recognitionRef = useRef<any>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -334,6 +344,24 @@ export default function StatusMatcher() {
       return;
     }
 
+    const patientVoiceMatch = rawFinal.match(
+      /^(利用者|患者|patient|patid|pat_id)\s*[:：]?\s*(.+)$/i
+    );
+    const impliedPatientShortcut = !selectedPatient && isLikelyPatientShortcut(rawFinal);
+    if (patientVoiceMatch || impliedPatientShortcut) {
+      const patientText = patientVoiceMatch
+        ? patientVoiceMatch[2]?.trim() ?? ""
+        : rawFinal.trim();
+      if (!patientText) {
+        setStatusMsg("利用者を指定してください（例: やまだたろう / 12345）");
+        return;
+      }
+      setPatientVoiceText(patientText);
+      setPatientVoiceRequestId((id) => id + 1);
+      setStatusMsg(`利用者検索: ${patientText}`);
+      return;
+    }
+
     const matchedField = bestFieldMatch(rawFinal, fields);
     if (matchedField) {
       setFocusKey(matchedField.field_key);
@@ -407,13 +435,21 @@ export default function StatusMatcher() {
 
   return (
     <div className={styles.wrapper}>
-      <PatientSelector />
+      <PatientSelector
+        externalVoiceText={patientVoiceText}
+        externalVoiceRequestId={patientVoiceRequestId}
+        onExternalVoiceResult={({ matched, message }) => {
+          setStatusMsg(matched ? `✅ ${message}` : `❌ ${message}`);
+        }}
+      />
 
-      {!selectedPatient ? (
+      {!selectedPatient && (
         <div className={styles.targetBox} style={{ textAlign: "center", color: "var(--secondary-text)" }}>
-          上の「対象利用者」から利用者を選択すると、状況入力を開始できます。
+          マイクで利用者名・ふりがな・pat_id を話すか、上の「対象利用者」から選択してください。
         </div>
-      ) : (
+      )}
+
+      {selectedPatient && (
         <>
       {/* Screen + date/month scope */}
       <div className={styles.scopeBar}>
@@ -554,13 +590,15 @@ export default function StatusMatcher() {
           </div>
         )}
       </div>
+        </>
+      )}
 
       <div className={styles.transcriptBox}>
         {transcript ? (
           <p>{transcript}</p>
         ) : (
           <p className={styles.placeholder}>
-            マイクで話してください…（例：「完食」「よし」「コメント〜」「保存」）
+            マイクで話してください…（例：「完食」「よし」「コメント〜」「保存」「やまだたろう」「12345」）
           </p>
         )}
       </div>
@@ -587,12 +625,12 @@ export default function StatusMatcher() {
         </p>
       </div>
 
-      {matchStatus === "match" && (
+      {selectedPatient && matchStatus === "match" && (
         <div className="alert alert-success rounded-4 shadow-sm border-0 text-center">
           🎯 候補 {matches.length} 件の中から最適なものを選択しました
         </div>
       )}
-      {matchStatus === "no-match" && (
+      {selectedPatient && matchStatus === "no-match" && (
         <div className="alert alert-warning rounded-4 shadow-sm border-0 text-center">
           🤔 フレーズ候補に該当するものがありませんでした
         </div>
@@ -607,40 +645,40 @@ export default function StatusMatcher() {
         </div>
       )}
 
-      <div className="card border-0 shadow-sm rounded-4">
-        <div className="card-body">
-          <h5 className="card-title mb-3">📋 現在の入力内容（保存対象）</h5>
-          {Object.keys(values).length === 0 ? (
-            <div className="text-center text-muted py-4">データがありません</div>
-          ) : (
-            <div className="list-group list-group-flush">
-              {fields
-                .filter((f) => values[f.field_key] !== undefined)
-                .map((f) => {
-                  const data = values[f.field_key];
-                  return (
-                    <div key={f.field_key} className="list-group-item border-0 px-0 py-2">
-                      <span className="badge bg-light text-dark me-2 rounded-pill fw-bold">
-                        {f.field_label}
-                      </span>
-                      {data.value !== undefined && (
-                        <small className="text-muted">
-                          値: <code className="bg-light px-2 py-1 rounded">{JSON.stringify(data.value)}</code>
-                        </small>
-                      )}
-                      {data.comment && (
-                        <small className="text-muted ms-2">
-                          コメント: <span className="fst-italic">{data.comment}</span>
-                        </small>
-                      )}
-                    </div>
-                  );
-                })}
-            </div>
-          )}
+      {selectedPatient && (
+        <div className="card border-0 shadow-sm rounded-4">
+          <div className="card-body">
+            <h5 className="card-title mb-3">📋 現在の入力内容（保存対象）</h5>
+            {Object.keys(values).length === 0 ? (
+              <div className="text-center text-muted py-4">データがありません</div>
+            ) : (
+              <div className="list-group list-group-flush">
+                {fields
+                  .filter((f) => values[f.field_key] !== undefined)
+                  .map((f) => {
+                    const data = values[f.field_key];
+                    return (
+                      <div key={f.field_key} className="list-group-item border-0 px-0 py-2">
+                        <span className="badge bg-light text-dark me-2 rounded-pill fw-bold">
+                          {f.field_label}
+                        </span>
+                        {data.value !== undefined && (
+                          <small className="text-muted">
+                            値: <code className="bg-light px-2 py-1 rounded">{JSON.stringify(data.value)}</code>
+                          </small>
+                        )}
+                        {data.comment && (
+                          <small className="text-muted ms-2">
+                            コメント: <span className="fst-italic">{data.comment}</span>
+                          </small>
+                        )}
+                      </div>
+                    );
+                  })}
+              </div>
+            )}
+          </div>
         </div>
-      </div>
-        </>
       )}
     </div>
   );

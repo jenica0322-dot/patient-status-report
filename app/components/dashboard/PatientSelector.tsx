@@ -3,14 +3,79 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { PersonCircle, CheckCircleFill, ChevronDown, Search } from "react-bootstrap-icons";
+import {
+  PersonCircle,
+  CheckCircleFill,
+  ChevronDown,
+  Search,
+} from "react-bootstrap-icons";
 import styles from "@/app/styles/PatientSelector.module.css";
 import { usePatient } from "@/app/context/PatientContext";
 import { fetchPatients, fetchPatientAreas, Patient, PatientArea } from "@/app/lib/statusApi";
 
 const PAGE_SIZE = 30;
+const VOICE_MATCH_MAX_PAGES = 20;
 
-export default function PatientSelector() {
+function toHiragana(value: string) {
+  return value.replace(/[\u30a1-\u30f6]/g, (ch) =>
+    String.fromCharCode(ch.charCodeAt(0) - 0x60)
+  );
+}
+
+function normalizeVoiceText(value: string) {
+  return toHiragana(value)
+    .toLowerCase()
+    .replace(/\s/g, "")
+    .replace(/[ーｰ]/g, "")
+    .replace(/[・･]/g, "")
+    .replace(/[０-９]/g, (d) => String.fromCharCode(d.charCodeAt(0) - 0xfee0));
+}
+
+function scorePatientMatch(patient: Patient, spoken: string) {
+  const normalizedSpoken = normalizeVoiceText(spoken);
+  if (!normalizedSpoken) return -1;
+
+  const patId = normalizeVoiceText(String(patient.pat_id ?? ""));
+  const internalId = normalizeVoiceText(String(patient.id));
+  const name = normalizeVoiceText(patient.name ?? "");
+  const customerName = normalizeVoiceText(patient.customer_name ?? "");
+  const customerKana = normalizeVoiceText(patient.customer_kana ?? "");
+  const names = [name, customerName, customerKana].filter(Boolean);
+
+  if (patId && normalizedSpoken === patId) return 140;
+  if (internalId && normalizedSpoken === internalId) return 130;
+  if (names.some((n) => n === normalizedSpoken)) return 120;
+  if (patId && patId.includes(normalizedSpoken)) return 95;
+  if (internalId && internalId.includes(normalizedSpoken)) return 90;
+  if (names.some((n) => n.startsWith(normalizedSpoken))) return 85;
+  if (names.some((n) => n.includes(normalizedSpoken))) return 75;
+
+  return -1;
+}
+
+function findBestPatientMatchWithScore(patients: Patient[], spoken: string) {
+  let best: { patient: Patient; score: number } | null = null;
+  for (const patient of patients) {
+    const score = scorePatientMatch(patient, spoken);
+    if (score < 0) continue;
+    if (!best || score > best.score) {
+      best = { patient, score };
+    }
+  }
+  return best;
+}
+
+type PatientSelectorProps = {
+  externalVoiceText?: string;
+  externalVoiceRequestId?: number;
+  onExternalVoiceResult?: (result: { matched: boolean; message: string }) => void;
+};
+
+export default function PatientSelector({
+  externalVoiceText,
+  externalVoiceRequestId,
+  onExternalVoiceResult,
+}: PatientSelectorProps) {
   const { selectedPatient, selectPatient } = usePatient();
 
   const [open, setOpen] = useState(false);
@@ -23,8 +88,12 @@ export default function PatientSelector() {
   const [queryInput, setQueryInput] = useState("");
   const [query, setQuery] = useState("");
   const [areaFilter, setAreaFilter] = useState("");
+  const [voiceStatus, setVoiceStatus] = useState("");
 
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const listRef = useRef<HTMLDivElement | null>(null);
+  const listSentinelRef = useRef<HTMLDivElement | null>(null);
+  const loadingMoreRef = useRef(false);
 
   useEffect(() => {
     const t = setTimeout(() => setQuery(queryInput.trim()), 300);
@@ -40,6 +109,8 @@ export default function PatientSelector() {
 
   const loadPage = useCallback(
     async (nextPage: number, append: boolean) => {
+      if (append && loadingMoreRef.current) return;
+      if (append) loadingMoreRef.current = true;
       if (append) setLoadingMore(true);
       else setLoading(true);
       try {
@@ -57,6 +128,7 @@ export default function PatientSelector() {
       } finally {
         setLoading(false);
         setLoadingMore(false);
+        loadingMoreRef.current = false;
       }
     },
     [query, areaFilter]
@@ -81,10 +153,92 @@ export default function PatientSelector() {
     return () => document.removeEventListener("mousedown", onClick);
   }, [open]);
 
+  useEffect(() => {
+    if (!open || !listSentinelRef.current) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries[0]?.isIntersecting) return;
+        if (!hasMore || loading || loadingMore) return;
+        void loadPage(page + 1, true);
+      },
+      {
+        root: listRef.current,
+        rootMargin: "120px 0px",
+        threshold: 0,
+      }
+    );
+    observer.observe(listSentinelRef.current);
+    return () => observer.disconnect();
+  }, [open, hasMore, loading, loadingMore, loadPage, page]);
+
   const handleSelect = (p: Patient) => {
     selectPatient(p);
     setOpen(false);
+    setVoiceStatus(`${p.name} を選択しました`);
+    onExternalVoiceResult?.({ matched: true, message: `${p.name} を選択しました` });
   };
+
+  const trySelectByVoiceText = async (spokenRaw: string) => {
+    const spoken = spokenRaw.trim();
+    if (!spoken) {
+      const message = "音声を認識できませんでした";
+      setVoiceStatus(message);
+      onExternalVoiceResult?.({ matched: false, message });
+      return;
+    }
+
+    setQueryInput(spoken);
+    setVoiceStatus(`音声: ${spoken} / 検索中...`);
+
+    try {
+      const candidateMap = new Map<number, Patient>(patients.map((p) => [p.id, p]));
+
+      const collectCandidates = async (q?: string) => {
+        let nextPage = 1;
+        let hasMorePages = true;
+        while (hasMorePages && nextPage <= VOICE_MATCH_MAX_PAGES) {
+          const result = await fetchPatients({
+            page: nextPage,
+            limit: PAGE_SIZE,
+            q,
+            belong_area: areaFilter || undefined,
+          });
+          for (const patient of result.items) {
+            candidateMap.set(patient.id, patient);
+          }
+          const scored = findBestPatientMatchWithScore(Array.from(candidateMap.values()), spoken);
+          if (scored && scored.score >= 120) return scored;
+          hasMorePages = result.hasMore;
+          nextPage += 1;
+        }
+        return findBestPatientMatchWithScore(Array.from(candidateMap.values()), spoken);
+      };
+
+      let bestMatch = await collectCandidates(spoken);
+      if (!bestMatch) {
+        setVoiceStatus(`音声: ${spoken} / 全利用者を検索中...`);
+        bestMatch = await collectCandidates(undefined);
+      }
+
+      if (bestMatch?.patient) {
+        handleSelect(bestMatch.patient);
+      } else {
+        const message = "一致する利用者が見つかりませんでした";
+        setVoiceStatus(message);
+        onExternalVoiceResult?.({ matched: false, message });
+      }
+    } catch (e) {
+      console.error(e);
+      const message = "音声検索に失敗しました";
+      setVoiceStatus(message);
+      onExternalVoiceResult?.({ matched: false, message });
+    }
+  };
+
+  useEffect(() => {
+    if (!externalVoiceRequestId || !externalVoiceText) return;
+    void trySelectByVoiceText(externalVoiceText);
+  }, [externalVoiceRequestId, externalVoiceText]);
 
   return (
     <div className={styles.wrapper} ref={containerRef}>
@@ -104,7 +258,7 @@ export default function PatientSelector() {
               <Search size={14} />
               <input
                 autoFocus
-                placeholder="名前・カナ・pat_id で検索"
+                placeholder="ひらがな・pat_id で検索"
                 value={queryInput}
                 onChange={(e) => setQueryInput(e.target.value)}
               />
@@ -118,8 +272,9 @@ export default function PatientSelector() {
               ))}
             </select>
           </div>
+          {!!voiceStatus && <div className={styles.voiceStatus}>{voiceStatus}</div>}
 
-          <div className={styles.list}>
+          <div className={styles.list} ref={listRef}>
             {loading ? (
               <div className={styles.centerMsg}>読み込み中…</div>
             ) : patients.length === 0 ? (
@@ -144,6 +299,7 @@ export default function PatientSelector() {
                     </button>
                   );
                 })}
+                <div ref={listSentinelRef} className={styles.listSentinel} aria-hidden="true" />
                 {hasMore && (
                   <button
                     type="button"
