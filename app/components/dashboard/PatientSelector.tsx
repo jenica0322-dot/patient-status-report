@@ -12,28 +12,18 @@ import {
 import styles from "@/app/styles/PatientSelector.module.css";
 import { usePatient } from "@/app/context/PatientContext";
 import { fetchPatients, fetchPatientAreas, Patient, PatientArea } from "@/app/lib/statusApi";
+import { normalizeVoiceText, normalizeSpokenDigits } from "@/app/lib/voiceText";
 
 const PAGE_SIZE = 30;
 const VOICE_MATCH_MAX_PAGES = 20;
 
-function toHiragana(value: string) {
-  return value.replace(/[\u30a1-\u30f6]/g, (ch) =>
-    String.fromCharCode(ch.charCodeAt(0) - 0x60)
-  );
-}
-
-function normalizeVoiceText(value: string) {
-  return toHiragana(value)
-    .toLowerCase()
-    .replace(/\s/g, "")
-    .replace(/[ーｰ]/g, "")
-    .replace(/[・･]/g, "")
-    .replace(/[０-９]/g, (d) => String.fromCharCode(d.charCodeAt(0) - 0xfee0));
-}
-
 function scorePatientMatch(patient: Patient, spoken: string) {
   const normalizedSpoken = normalizeVoiceText(spoken);
-  if (!normalizedSpoken) return -1;
+  // Digit-only reading of the spoken text — handles "まる"/"れい" for 0 and
+  // kanji-numeral transcription of slow digit-by-digit ID reading. Only ever
+  // compared against the numeric patId/internalId, never against names.
+  const digitSpoken = normalizeSpokenDigits(spoken);
+  if (!normalizedSpoken && !digitSpoken) return -1;
 
   const patId = normalizeVoiceText(String(patient.pat_id ?? ""));
   const internalId = normalizeVoiceText(String(patient.id));
@@ -42,11 +32,11 @@ function scorePatientMatch(patient: Patient, spoken: string) {
   const customerKana = normalizeVoiceText(patient.customer_kana ?? "");
   const names = [name, customerName, customerKana].filter(Boolean);
 
-  if (patId && normalizedSpoken === patId) return 140;
-  if (internalId && normalizedSpoken === internalId) return 130;
+  if (patId && (normalizedSpoken === patId || (digitSpoken && digitSpoken === patId))) return 140;
+  if (internalId && (normalizedSpoken === internalId || (digitSpoken && digitSpoken === internalId))) return 130;
   if (names.some((n) => n === normalizedSpoken)) return 120;
-  if (patId && patId.includes(normalizedSpoken)) return 95;
-  if (internalId && internalId.includes(normalizedSpoken)) return 90;
+  if (patId && (patId.includes(normalizedSpoken) || (digitSpoken && patId.includes(digitSpoken)))) return 95;
+  if (internalId && (internalId.includes(normalizedSpoken) || (digitSpoken && internalId.includes(digitSpoken)))) return 90;
   if (names.some((n) => n.startsWith(normalizedSpoken))) return 85;
   if (names.some((n) => n.includes(normalizedSpoken))) return 75;
 
