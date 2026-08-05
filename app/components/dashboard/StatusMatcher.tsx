@@ -12,6 +12,7 @@ import {
 import { usePatient } from "@/app/context/PatientContext";
 import { JaDateInput, JaMonthInput } from "@/app/components/JaDatePicker";
 import PatientSelector from "@/app/components/dashboard/PatientSelector";
+import { normalizeSpokenDigits } from "@/app/lib/voiceText";
 
 declare global {
   interface Window {
@@ -72,17 +73,43 @@ function isLikelyPatientShortcut(text: string) {
   if (!normalized) return false;
   if (/^[0-9]{2,}$/.test(normalized)) return true;
   if (/^[ぁ-んー]{2,}$/.test(normalized)) return true;
+  // Catches pat_id read as kanji numerals ("一二三") or with the conventional
+  // "まる"/"れい" reading of 0 — neither of which is plain [0-9] or hiragana text.
+  if (normalizeSpokenDigits(text).length >= 2) return true;
   return false;
+}
+
+// Labels like "顔色/元気" or "新聞/郵便" join two spoken concepts with a slash nobody
+// actually says aloud, and continuous recognition often finalizes each half separately
+// when the speaker pauses between them — so each half needs to be matchable on its own.
+function fieldMatchCandidates(label: string): string[] {
+  const parts = label.split(/[\/／]/).map((p) => p.trim()).filter(Boolean);
+  return parts.length > 1 ? [label, ...parts] : [label];
 }
 
 function bestFieldMatch(utterance: string, fields: Field[]): Field | null {
   const cleaned = normalizeJa(utterance);
+  if (!cleaned) return null;
   let best: { f: Field; score: number } | null = null;
   for (const f of fields) {
-    const dist = levenshteinDistance(cleaned, normalizeJa(f.field_label));
-    const maxLen = Math.max(cleaned.length, f.field_label.length);
-    const sim = ((maxLen - dist) / maxLen) * 100;
-    if (!best || sim > best.score) best = { f, score: sim };
+    for (const candidate of fieldMatchCandidates(f.field_label)) {
+      const cleanedCandidate = normalizeJa(candidate);
+      if (!cleanedCandidate) continue;
+      let sim: number;
+      if (
+        cleaned.length >= 2 &&
+        (cleanedCandidate.includes(cleaned) || cleaned.includes(cleanedCandidate))
+      ) {
+        // Whole word/segment match against a (possibly compound) label — e.g. saying
+        // only "食欲" for "食欲低下", or "元気" for the "顔色/元気" candidate above.
+        sim = 100;
+      } else {
+        const dist = levenshteinDistance(cleaned, cleanedCandidate);
+        const maxLen = Math.max(cleaned.length, cleanedCandidate.length);
+        sim = ((maxLen - dist) / maxLen) * 100;
+      }
+      if (!best || sim > best.score) best = { f, score: sim };
+    }
   }
   return best && best.score >= 60 ? best.f : null;
 }
