@@ -244,6 +244,14 @@ export default function StatusMatcher() {
   // ref — same reason focusKey/values are — otherwise a voice-spoken date after
   // switching 日次記録/月次報告 while still listening would apply to the wrong field.
   const screenKeyRef = useRef<string>(screenKey);
+  // handleSaveRecord is reachable from that same stale closure via the spoken "保存"
+  // command, so it needs its own fresh reads too — otherwise saying a date command
+  // ("8月6日") and then "保存" in one listening session saves under the date/patient
+  // that was current when recognition started, not the one just set, and the record
+  // silently lands on the wrong day/month and never shows up in the report.
+  const selectedPatientRef = useRef(selectedPatient);
+  const recordDateRef = useRef(recordDate);
+  const yearMonthRef = useRef(yearMonth);
 
   useEffect(() => {
     focusKeyRef.current = focusKey;
@@ -256,6 +264,18 @@ export default function StatusMatcher() {
   useEffect(() => {
     valuesRef.current = values;
   }, [values]);
+
+  useEffect(() => {
+    selectedPatientRef.current = selectedPatient;
+  }, [selectedPatient]);
+
+  useEffect(() => {
+    recordDateRef.current = recordDate;
+  }, [recordDate]);
+
+  useEffect(() => {
+    yearMonthRef.current = yearMonth;
+  }, [yearMonth]);
 
   // Load master fields whenever the screen changes.
   useEffect(() => {
@@ -527,7 +547,7 @@ export default function StatusMatcher() {
     );
     const currentFocusField = fields.find((f) => f.field_key === focusKeyRef.current);
     const isPatientSelectFieldFocused = currentFocusField?.field_label === PATIENT_SELECT_FIELD_LABEL;
-    const impliedPatientShortcut = !selectedPatient && isLikelyPatientShortcut(rawFinal);
+    const impliedPatientShortcut = !selectedPatientRef.current && isLikelyPatientShortcut(rawFinal);
     if (patientVoiceMatch || impliedPatientShortcut || isPatientSelectFieldFocused) {
       const patientText = patientVoiceMatch
         ? patientVoiceMatch[2]?.trim() ?? ""
@@ -600,14 +620,16 @@ export default function StatusMatcher() {
   };
 
   const handleSaveRecord = () => {
-    if (!selectedPatient) {
+    const patient = selectedPatientRef.current;
+    if (!patient) {
       setStatusMsg("❌ 利用者が選択されていません");
       return;
     }
+    const screen = screenKeyRef.current;
     const params =
-      screenKey === "daily_status"
-        ? { screen_key: screenKey, patient_id: selectedPatient.id, record_date: recordDate, values: valuesRef.current }
-        : { screen_key: screenKey, patient_id: selectedPatient.id, record_year_month: yearMonth, values: valuesRef.current };
+      screen === "daily_status"
+        ? { screen_key: screen, patient_id: patient.id, record_date: recordDateRef.current, values: valuesRef.current }
+        : { screen_key: screen, patient_id: patient.id, record_year_month: yearMonthRef.current, values: valuesRef.current };
 
     saveStatusRecord(params)
       .then(() => {
