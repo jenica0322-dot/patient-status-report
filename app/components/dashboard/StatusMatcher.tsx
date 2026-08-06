@@ -79,11 +79,14 @@ function isLikelyPatientShortcut(text: string) {
   return false;
 }
 
-// Labels like "顔色/元気" or "新聞/郵便" join two spoken concepts with a slash nobody
-// actually says aloud, and continuous recognition often finalizes each half separately
-// when the speaker pauses between them — so each half needs to be matchable on its own.
+// Labels like "顔色/元気", "新聞/郵便", or "体調面・一言" join two spoken concepts with
+// a slash or center-dot nobody actually says aloud, and continuous recognition often
+// finalizes each half separately when the speaker pauses between them — so each half
+// needs to be matchable on its own. The "・" case also covers the "<base>・一言"-style
+// companion text fields (食事状況・一言, 体調面・一言, 日常サポート・一言, 共有事項・内容,
+// 対応方針・方針), which are otherwise unreachable since nobody speaks "・" aloud.
 function fieldMatchCandidates(label: string): string[] {
-  const parts = label.split(/[\/／]/).map((p) => p.trim()).filter(Boolean);
+  const parts = label.split(/[\/／・]/).map((p) => p.trim()).filter(Boolean);
   return parts.length > 1 ? [label, ...parts] : [label];
 }
 
@@ -96,13 +99,21 @@ function bestFieldMatch(utterance: string, fields: Field[]): Field | null {
       const cleanedCandidate = normalizeJa(candidate);
       if (!cleanedCandidate) continue;
       let sim: number;
-      if (
+      if (cleaned === cleanedCandidate) {
+        // A verbatim match against this exact candidate always outranks a mere
+        // substring hit inside a longer, unrelated field's label. Without this,
+        // saying "対応方針" — an exact split-candidate of "対応方針・方針" — would
+        // tie with it merely appearing inside "次月の対応方針" and always lose to
+        // whichever field happens to come first in field order.
+        sim = 100;
+      } else if (
         cleaned.length >= 2 &&
         (cleanedCandidate.includes(cleaned) || cleaned.includes(cleanedCandidate))
       ) {
-        // Whole word/segment match against a (possibly compound) label — e.g. saying
+        // Partial word/segment match against a (possibly compound) label — e.g. saying
         // only "食欲" for "食欲低下", or "元気" for the "顔色/元気" candidate above.
-        sim = 100;
+        // Scored below an exact match (see above) so it never wins that tie-break.
+        sim = 90;
       } else {
         const dist = levenshteinDistance(cleaned, cleanedCandidate);
         const maxLen = Math.max(cleaned.length, cleanedCandidate.length);
@@ -117,6 +128,62 @@ function bestFieldMatch(utterance: string, fields: Field[]): Field | null {
 const AFFIRMATIVE = /^(よし|した|できた|チェック|レ|まる|○|✓|ok|オーケー)$/;
 const NEGATIVE = /^(なし|しない|できていない|ばつ|×|no)$/;
 const PATIENT_SELECT_FIELD_LABEL = "利用者選択";
+
+function pad2(n: number) {
+  return String(n).padStart(2, "0");
+}
+function toIsoDate(d: Date) {
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+}
+function toYearMonth(d: Date) {
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}`;
+}
+
+// Recognizes a spoken date and resolves it to both an ISO date (for the daily
+// 記録日 field) and a year-month (for the monthly 対象年月 field) — the caller
+// picks whichever applies to the screen currently in view. Only matches when the
+// ENTIRE utterance is date-shaped (anchored regexes), so it can't misfire on a
+// sentence that merely contains a date-like fragment partway through.
+function parseSpokenDate(utterance: string): { date?: string; month?: string } | null {
+  const cleaned = normalizeJa(utterance);
+  if (!cleaned) return null;
+
+  const today = new Date();
+  if (/^(今日|本日|きょう)$/.test(cleaned)) {
+    return { date: toIsoDate(today), month: toYearMonth(today) };
+  }
+  if (/^(昨日|さくじつ|きのう)$/.test(cleaned)) {
+    const d = new Date(today);
+    d.setDate(d.getDate() - 1);
+    return { date: toIsoDate(d), month: toYearMonth(d) };
+  }
+  if (/^(明日|あした|あす)$/.test(cleaned)) {
+    const d = new Date(today);
+    d.setDate(d.getDate() + 1);
+    return { date: toIsoDate(d), month: toYearMonth(d) };
+  }
+
+  // "2026年8月6日" / "8月6日" (year defaults to the current year when omitted).
+  let m = cleaned.match(/^(?:(\d{4})年)?(\d{1,2})月(\d{1,2})日$/);
+  if (m) {
+    const year = m[1] ? Number(m[1]) : today.getFullYear();
+    const month = Number(m[2]);
+    const day = Number(m[3]);
+    if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+    return { date: `${year}-${pad2(month)}-${pad2(day)}`, month: `${year}-${pad2(month)}` };
+  }
+
+  // "2026年8月" / "8月" — month-only, mainly for the 対象年月 field.
+  m = cleaned.match(/^(?:(\d{4})年)?(\d{1,2})月$/);
+  if (m) {
+    const year = m[1] ? Number(m[1]) : today.getFullYear();
+    const month = Number(m[2]);
+    if (month < 1 || month > 12) return null;
+    return { month: `${year}-${pad2(month)}` };
+  }
+
+  return null;
+}
 
 async function canRecordMic() {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -172,10 +239,19 @@ export default function StatusMatcher() {
   const focusKeyRef = useRef<string>("");
   const valuesRef = useRef<Record<string, { value?: any; comment?: string }>>({});
   const patientFieldVoiceKeyRef = useRef<string | null>(null);
+  // A long-lived recognition session's onresult closure can outlive several renders
+  // (see createRecognition/restartRecognition), so screenKey must be read through a
+  // ref — same reason focusKey/values are — otherwise a voice-spoken date after
+  // switching 日次記録/月次報告 while still listening would apply to the wrong field.
+  const screenKeyRef = useRef<string>(screenKey);
 
   useEffect(() => {
     focusKeyRef.current = focusKey;
   }, [focusKey]);
+
+  useEffect(() => {
+    screenKeyRef.current = screenKey;
+  }, [screenKey]);
 
   useEffect(() => {
     valuesRef.current = values;
@@ -219,10 +295,104 @@ export default function StatusMatcher() {
     setManualText(String(values[focusKey]?.value ?? ""));
   }, [focusKey]);
 
-  useEffect(() => () => recognitionRef.current?.stop(), []);
+  // On unmount (e.g. navigating away to another screen while still listening),
+  // detach the handlers before stopping — otherwise the old instance's onend
+  // fires after unmount and, since isListeningRef still reads true, restarts
+  // itself in the background. That zombie session then occupies the browser's
+  // single speech-recognition slot forever, so the next time this screen mounts
+  // and the user presses the mic, start() silently fails with nothing listening.
+  useEffect(() => {
+    return () => {
+      const rec = recognitionRef.current;
+      if (rec) {
+        rec.onend = null;
+        rec.onerror = null;
+        rec.onresult = null;
+        try {
+          rec.stop();
+        } catch {}
+      }
+      isListeningRef.current = false;
+    };
+  }, []);
 
   const logUtter = (text: string) => {
     setSpokenLog([{ text, at: Date.now() }]);
+  };
+
+  // Builds a fresh recognition instance rather than reusing one that just ended —
+  // some browsers throw InvalidStateError when start() is called again on the same
+  // instance too soon after onend, which used to silently kill voice input for good
+  // (most noticeably right after saying/clicking "保存", the natural pause point).
+  const createRecognition = () => {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const rec = new SR();
+    rec.continuous = true;
+    rec.interimResults = true;
+    rec.lang = "ja-JP";
+
+    rec.onresult = (e: any) => {
+      let interim = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const chunk = e.results[i][0].transcript.trim();
+        if (e.results[i].isFinal) handleFinalTranscript(chunk);
+        else interim += chunk;
+      }
+      setTranscript(interim);
+    };
+
+    // The browser ended this session on its own (e.g. after a pause in speech) —
+    // it's already fully torn down at this point, so it's safe to start a new one.
+    rec.onend = () => {
+      if (isListeningRef.current) startFreshRecognition();
+    };
+    rec.onerror = (ev: any) => {
+      console.warn("Speech error:", ev?.error);
+      // "no-speech" fires routinely during pauses; onend already restarts listening, so ignore it.
+      if (ev?.error === "no-speech" || ev?.error === "aborted") return;
+
+      const ERROR_MESSAGES: Record<string, string> = {
+        "not-allowed": "マイクへのアクセスが拒否されました。ブラウザのサイト設定で許可してください。",
+        "service-not-allowed": "マイクへのアクセスが拒否されました。ブラウザのサイト設定で許可してください。",
+        "audio-capture": "マイクを利用できませんでした。他のアプリがマイクを使用していないか確認してください。",
+        network: "音声認識サーバーに接続できませんでした。ネットワーク接続を確認してください。",
+      };
+      stopAll();
+      setStatusMsg(`❌ ${ERROR_MESSAGES[ev?.error] || "音声認識でエラーが発生しました"}`);
+    };
+
+    return rec;
+  };
+
+  const startFreshRecognition = () => {
+    if (!isListeningRef.current) return;
+    try {
+      recognitionRef.current = createRecognition();
+      recognitionRef.current.start();
+    } catch (err) {
+      console.warn("voice restart failed:", err);
+    }
+  };
+
+  // Explicitly retires whatever recognition instance is currently active and
+  // starts a brand-new one — but only once the browser confirms the old session
+  // is actually closed (via its onend), rather than guessing with a timer. Used
+  // after save so voice input can't be left stranded by a session the browser
+  // silently ended out from under us while the save was in flight.
+  const restartRecognition = () => {
+    const old = recognitionRef.current;
+    if (!old) {
+      startFreshRecognition();
+      return;
+    }
+    old.onresult = null;
+    old.onerror = null;
+    old.onend = () => startFreshRecognition();
+    try {
+      old.stop();
+    } catch {
+      startFreshRecognition();
+    }
   };
 
   const handleStartListening = async () => {
@@ -235,48 +405,8 @@ export default function StatusMatcher() {
     setMatches([]);
 
     try {
-      const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-      recognitionRef.current = new SR();
-      const rec = recognitionRef.current;
-      rec.continuous = true;
-      rec.interimResults = true;
-      rec.lang = "ja-JP";
-
-      rec.onresult = (e: any) => {
-        let interim = "";
-        for (let i = e.resultIndex; i < e.results.length; i++) {
-          const chunk = e.results[i][0].transcript.trim();
-          if (e.results[i].isFinal) handleFinalTranscript(chunk);
-          else interim += chunk;
-        }
-        setTranscript(interim);
-      };
-
-      rec.onend = () => {
-        if (isListeningRef.current) {
-          try {
-            rec.start();
-          } catch (err) {
-            console.warn("restart failed:", err);
-          }
-        }
-      };
-      rec.onerror = (ev: any) => {
-        console.warn("Speech error:", ev?.error);
-        // "no-speech" fires routinely during pauses; onend already restarts listening, so ignore it.
-        if (ev?.error === "no-speech" || ev?.error === "aborted") return;
-
-        const ERROR_MESSAGES: Record<string, string> = {
-          "not-allowed": "マイクへのアクセスが拒否されました。ブラウザのサイト設定で許可してください。",
-          "service-not-allowed": "マイクへのアクセスが拒否されました。ブラウザのサイト設定で許可してください。",
-          "audio-capture": "マイクを利用できませんでした。他のアプリがマイクを使用していないか確認してください。",
-          network: "音声認識サーバーに接続できませんでした。ネットワーク接続を確認してください。",
-        };
-        stopAll();
-        setStatusMsg(`❌ ${ERROR_MESSAGES[ev?.error] || "音声認識でエラーが発生しました"}`);
-      };
-
-      rec.start();
+      recognitionRef.current = createRecognition();
+      recognitionRef.current.start();
       setIsListening(true);
       isListeningRef.current = true;
     } catch (err: any) {
@@ -362,6 +492,23 @@ export default function StatusMatcher() {
       return;
     }
 
+    // Date commands take priority over Target Field dictation — the 記録日/対象年月
+    // field sits outside the fields list (it's not voice-selectable via bestFieldMatch),
+    // so recognizing it here is the only way to reach it by voice. This is checked
+    // against the whole utterance only, so a sentence dictated into some other field
+    // that merely happens to contain a date fragment won't trigger it.
+    const spokenDate = parseSpokenDate(rawFinal);
+    if (spokenDate) {
+      if (screenKeyRef.current === "daily_status" && spokenDate.date) {
+        setRecordDate(spokenDate.date);
+        setStatusMsg(`📅 記録日を ${spokenDate.date} に設定しました`);
+      } else if (screenKeyRef.current === "monthly_report" && spokenDate.month) {
+        setYearMonth(spokenDate.month);
+        setStatusMsg(`📅 対象年月を ${spokenDate.month} に設定しました`);
+      }
+      return;
+    }
+
     // Switching the Target Field by voice takes priority over any other interpretation,
     // so saying a field name always jumps there — even while parked on "利用者選択"
     // (which would otherwise swallow every utterance as a patient search).
@@ -426,6 +573,21 @@ export default function StatusMatcher() {
       return;
     }
 
+    if (field.field_type === "number") {
+      // Try digits the recognizer already transcribed as numerals first (incl.
+      // fullwidth), then fall back to digit-by-digit readings like "まる"/"れい"/
+      // kanji numerals (same convention used for pat_id — see normalizeSpokenDigits).
+      const plainDigits = normalizeJa(rawFinal).replace(/[^0-9.\-]/g, "");
+      const numeric = plainDigits || normalizeSpokenDigits(rawFinal);
+      if (numeric && !Number.isNaN(Number(numeric))) {
+        setFieldValue(currentKey, Number(numeric));
+        setStatusMsg(`${field.field_label} に ${numeric} を入力しました`);
+      } else {
+        setStatusMsg("数字で回答してください");
+      }
+      return;
+    }
+
     if (field.field_type === "text" || field.field_type === "preset") {
       if (field.phrases?.length) {
         checkMatchAgainstPhrases(rawFinal, field.phrases, currentKey);
@@ -454,6 +616,10 @@ export default function StatusMatcher() {
         setMatchStatus("none");
         setTranscript("");
         lastFinalRef.current = "";
+        // Force a clean recognition instance after save so voice input keeps
+        // accepting commands even if the browser silently ended the session
+        // during the save (see createRecognition/restartRecognition above).
+        if (isListeningRef.current) restartRecognition();
       })
       .catch(() => setStatusMsg("❌ 保存に失敗しました"));
   };
@@ -632,7 +798,7 @@ export default function StatusMatcher() {
           <p>{transcript}</p>
         ) : (
           <p className={styles.placeholder}>
-            マイクで話してください…（例：「完食」「よし」「コメント〜」「保存」「やまだたろう」「12345」）
+            マイクで話してください…（例：「完食」「よし」「コメント〜」「今日」「8月6日」「保存」「やまだたろう」「12345」）
           </p>
         )}
       </div>
