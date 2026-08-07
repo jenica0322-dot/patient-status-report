@@ -1,7 +1,7 @@
 // app/components/layout/NavHeader.tsx
 "use client";
 
-import React from "react";
+import React, { useEffect, useRef } from "react";
 import { Navbar, Container, Nav, Button } from "react-bootstrap";
 import { List, PersonCircle, ClipboardHeart } from "react-bootstrap-icons";
 import styles from "@/app/styles/NavHeader.module.css";
@@ -26,6 +26,27 @@ const NavHeader: React.FC<NavHeaderProps> = ({
   const collapsedWidth = 80;
   const expandedWidth = 260;
 
+  const navRef = useRef<HTMLElement>(null);
+
+  // Header height varies with content (patient badge, wrapped brand text on
+  // narrow phones, etc.), so measure it live instead of guessing a fixed
+  // offset — the content wrapper reads this via the --header-h CSS var.
+  useEffect(() => {
+    const el = navRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+
+    const applyHeight = () => {
+      document.documentElement.style.setProperty(
+        "--header-h",
+        `${Math.ceil(el.getBoundingClientRect().height)}px`
+      );
+    };
+
+    const observer = new ResizeObserver(applyHeight);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [isDesktop, patient_name, reserveInstallButtonSpace]);
+
   const headerStyle: React.CSSProperties = isDesktop
     ? {
         marginLeft: isSidebarExpanded ? expandedWidth : collapsedWidth,
@@ -40,6 +61,7 @@ const NavHeader: React.FC<NavHeaderProps> = ({
 
   return (
     <Navbar
+      ref={navRef}
       expand="lg"
       className={styles.appHeader}
       fixed="top"

@@ -234,8 +234,10 @@ export default function ReportPage() {
 
         {!loading && report && (
           <Card className="mb-4">
-            <Card.Body className={styles.gridScroll}>
-              <table className={styles.grid}>
+            <Card.Body>
+              <p className={styles.scrollHint}>← 横にスクロールできます →</p>
+              <div className={styles.gridScroll}>
+                <table className={styles.grid}>
                 <tbody>
                   {/* Header block */}
                   <tr>
@@ -431,6 +433,7 @@ export default function ReportPage() {
                   </tr>
                 </tbody>
               </table>
+              </div>
             </Card.Body>
           </Card>
         )}
