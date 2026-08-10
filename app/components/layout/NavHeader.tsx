@@ -67,7 +67,10 @@ const NavHeader: React.FC<NavHeaderProps> = ({
       fixed="top"
       style={headerStyle}
     >
-      <Container fluid>
+      <Container
+        fluid
+        className={reserveInstallButtonSpace ? styles.reserveInstallSpace : ""}
+      >
         <Button
           variant="outline-secondary"
           className={`d-md-none me-2 ${styles.menuButton}`}
@@ -86,11 +89,9 @@ const NavHeader: React.FC<NavHeaderProps> = ({
           )}
         </Navbar.Brand>
 
-        <Nav
-          className={`ms-auto ${reserveInstallButtonSpace ? styles.reserveInstallSpace : ""}`}
-        >
+        <Nav className="ms-auto d-flex">
           <div className={styles.welcomeContainer}>
-            <PersonCircle size={20} className={styles.welcomeIcon} />
+            <PersonCircle size={16} className={styles.welcomeIcon} />
             <span className={`${styles.welcomeText} d-none d-md-inline`}>
               ようこそ, {employee_name}さん
             </span>
