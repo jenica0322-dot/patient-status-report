@@ -132,9 +132,11 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     return null;
   }
 
+  const mobileMenuOpen = !isDesktop && showOffcanvas;
+
   return (
     <>
-      {isInstallable && (
+      {isInstallable && !mobileMenuOpen && (
         <button
           className={layoutStyles.installButton}
           onClick={handleInstallClick}

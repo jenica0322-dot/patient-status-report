@@ -172,28 +172,102 @@
   }
 }
 
-.presetSelect {
+.fieldDropdown {
+  position: relative;
   width: 100%;
+  margin-bottom: 1rem;
+}
+
+.fieldTrigger {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
   padding: 0.875rem 1rem;
   font-size: 1rem;
   border-radius: 12px;
   border: 2px solid var(--border-color);
   background: var(--primary-bg);
-  margin-bottom: 1rem;
-  transition: all 0.3s ease;
+  transition: all 0.2s ease;
   font-weight: 500;
   color: var(--primary-text);
   box-shadow: var(--shadow-sm);
+  cursor: pointer;
 }
 
-.presetSelect:focus {
-  outline: none;
+.fieldTrigger:hover {
+  border-color: var(--primary-blue-hover);
+}
+
+.fieldTriggerOpen {
   border-color: var(--primary-blue);
   box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.15);
 }
 
-.presetSelect:hover {
-  border-color: var(--primary-blue-hover);
+.fieldChevron {
+  flex-shrink: 0;
+  color: var(--secondary-text);
+  transition: transform 0.2s ease;
+}
+
+.fieldChevronOpen {
+  transform: rotate(180deg);
+}
+
+/* Bounded, in-component panel — unlike a native <select> popup, this can
+   never render on top of (or clipped by) the page header on small screens. */
+.fieldPanel {
+  position: relative;
+  margin-top: 0.5rem;
+  max-height: 320px;
+  overflow-y: auto;
+  background: var(--primary-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  box-shadow: var(--shadow-lg);
+  padding: 0.375rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.fieldOption {
+  width: 100%;
+  text-align: left;
+  padding: 0.6rem 0.75rem;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: var(--primary-text);
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+
+.fieldOption:hover {
+  background: var(--secondary-bg);
+}
+
+.fieldOptionActive {
+  background: var(--brand-50);
+  color: var(--brand-700, #0f766e);
+  font-weight: 600;
+}
+
+@media (max-width: 480px) {
+  .fieldTrigger {
+    padding: 0.7rem 0.85rem;
+    font-size: 0.9rem;
+  }
+
+  .fieldPanel {
+    max-height: 260px;
+  }
+
+  .fieldOption {
+    padding: 0.45rem 0.6rem;
+    font-size: 0.85rem;
+  }
 }
 
 .checkboxToggle {

@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useMemo } from "react";
-import { MicFill, StopFill, CheckCircleFill, Circle } from "react-bootstrap-icons";
+import { MicFill, StopFill, CheckCircleFill, Circle, ChevronDown } from "react-bootstrap-icons";
 import styles from "@/app/styles/StatusMatcher.module.css";
 import {
   fetchStatusFields,
@@ -232,7 +232,9 @@ export default function StatusMatcher() {
   const [manualText, setManualText] = useState("");
   const [patientVoiceText, setPatientVoiceText] = useState("");
   const [patientVoiceRequestId, setPatientVoiceRequestId] = useState(0);
+  const [fieldMenuOpen, setFieldMenuOpen] = useState(false);
 
+  const fieldMenuRef = useRef<HTMLDivElement | null>(null);
   const recognitionRef = useRef<any>(null);
   const isListeningRef = useRef(false);
   const lastFinalRef = useRef<string>("");
@@ -313,7 +315,19 @@ export default function StatusMatcher() {
 
   useEffect(() => {
     setManualText(String(values[focusKey]?.value ?? ""));
+    setFieldMenuOpen(false);
   }, [focusKey]);
+
+  useEffect(() => {
+    if (!fieldMenuOpen) return;
+    const onClick = (e: MouseEvent) => {
+      if (fieldMenuRef.current && !fieldMenuRef.current.contains(e.target as Node)) {
+        setFieldMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onClick);
+    return () => document.removeEventListener("mousedown", onClick);
+  }, [fieldMenuOpen]);
 
   // On unmount (e.g. navigating away to another screen while still listening),
   // detach the handlers before stopping — otherwise the old instance's onend
@@ -703,17 +717,35 @@ export default function StatusMatcher() {
         ) : (
           <div style={{ marginTop: "1.5rem" }}>
             <label>対象フィールド</label>
-            <select
-              className={styles.presetSelect}
-              value={focusKey}
-              onChange={(e) => setFocusKey(e.target.value)}
-            >
-              {fields.map((f) => (
-                <option key={f.field_key} value={f.field_key}>
-                  {f.field_label}
-                </option>
-              ))}
-            </select>
+            <div className={styles.fieldDropdown} ref={fieldMenuRef}>
+              <button
+                type="button"
+                className={`${styles.fieldTrigger} ${fieldMenuOpen ? styles.fieldTriggerOpen : ""}`}
+                onClick={() => setFieldMenuOpen((v) => !v)}
+              >
+                <span>{focusField?.field_label ?? "選択してください"}</span>
+                <ChevronDown
+                  size={14}
+                  className={`${styles.fieldChevron} ${fieldMenuOpen ? styles.fieldChevronOpen : ""}`}
+                />
+              </button>
+              {fieldMenuOpen && (
+                <div className={styles.fieldPanel}>
+                  {fields.map((f) => (
+                    <button
+                      key={f.field_key}
+                      type="button"
+                      className={`${styles.fieldOption} ${
+                        f.field_key === focusKey ? styles.fieldOptionActive : ""
+                      }`}
+                      onClick={() => setFocusKey(f.field_key)}
+                    >
+                      {f.field_label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
 
             {!isPatientSelectField && (
               <>

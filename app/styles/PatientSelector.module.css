@@ -65,11 +65,8 @@
 }
 
 .panel {
-  position: absolute;
-  top: calc(100% + 0.5rem);
-  left: 0;
-  right: 0;
-  z-index: 20;
+  position: relative;
+  margin-top: 0.5rem;
   background: var(--primary-bg);
   border: 1px solid var(--border-color);
   border-radius: 16px;
@@ -108,13 +105,85 @@
   font-size: 0.9rem;
 }
 
-.filters select {
+.areaDropdown {
+  position: relative;
+  flex: 1 1 180px;
+}
+
+.areaTrigger {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
   border: 1px solid var(--border-color);
   border-radius: 10px;
   padding: 0.5rem 0.75rem;
   background: var(--secondary-bg);
   color: var(--primary-text);
   font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.areaTrigger:hover,
+.areaTriggerOpen {
+  border-color: var(--primary-blue-hover);
+}
+
+.areaTriggerText {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.areaChevron {
+  flex-shrink: 0;
+  color: var(--secondary-text);
+  transition: transform 0.2s ease;
+}
+
+.areaChevronOpen {
+  transform: rotate(180deg);
+}
+
+/* In-flow, not an overlay — pushes the patient list down instead of
+   floating over it, so it can never end up covered by (or covering)
+   unrelated content further down the page on small screens. */
+.areaMenu {
+  position: relative;
+  margin-top: 0.375rem;
+  max-height: 240px;
+  overflow-y: auto;
+  background: var(--primary-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  box-shadow: var(--shadow-lg);
+  padding: 0.375rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.areaOption {
+  width: 100%;
+  text-align: left;
+  padding: 0.5rem 0.65rem;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: var(--primary-text);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.areaOption:hover {
+  background: var(--secondary-bg);
+}
+
+.areaOptionActive {
+  background: var(--brand-50);
+  color: var(--brand-700, #0f766e);
+  font-weight: 600;
 }
 
 .voiceStatus {

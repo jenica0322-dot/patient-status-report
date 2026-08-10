@@ -81,8 +81,10 @@ export default function PatientSelector({
   const [query, setQuery] = useState("");
   const [areaFilter, setAreaFilter] = useState("");
   const [voiceStatus, setVoiceStatus] = useState("");
+  const [areaMenuOpen, setAreaMenuOpen] = useState(false);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const areaMenuRef = useRef<HTMLDivElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
   const listSentinelRef = useRef<HTMLDivElement | null>(null);
   const loadingMoreRef = useRef(false);
@@ -91,6 +93,10 @@ export default function PatientSelector({
     const t = setTimeout(() => setQuery(queryInput.trim()), 300);
     return () => clearTimeout(t);
   }, [queryInput]);
+
+  useEffect(() => {
+    if (!open) setAreaMenuOpen(false);
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -236,6 +242,24 @@ export default function PatientSelector({
     if (locked) setOpen(false);
   }, [locked]);
 
+  useEffect(() => {
+    if (!areaMenuOpen) return;
+    const onClick = (e: MouseEvent) => {
+      if (areaMenuRef.current && !areaMenuRef.current.contains(e.target as Node)) {
+        setAreaMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onClick);
+    return () => document.removeEventListener("mousedown", onClick);
+  }, [areaMenuOpen]);
+
+  const selectedAreaLabel = areaFilter
+    ? (() => {
+        const a = areas.find((x) => x.code === areaFilter);
+        return a ? `${a.code} — ${a.name}` : areaFilter;
+      })()
+    : "すべてのエリア";
+
   return (
     <div className={styles.wrapper} ref={containerRef}>
       <label className={styles.label}>対象利用者</label>
@@ -265,14 +289,48 @@ export default function PatientSelector({
                 onChange={(e) => setQueryInput(e.target.value)}
               />
             </div>
-            <select value={areaFilter} onChange={(e) => setAreaFilter(e.target.value)}>
-              <option value="">すべてのエリア</option>
-              {areas.map((a) => (
-                <option key={a.code} value={a.code}>
-                  {a.code} — {a.name}
-                </option>
-              ))}
-            </select>
+            <div className={styles.areaDropdown} ref={areaMenuRef}>
+              <button
+                type="button"
+                className={`${styles.areaTrigger} ${areaMenuOpen ? styles.areaTriggerOpen : ""}`}
+                onClick={() => setAreaMenuOpen((v) => !v)}
+              >
+                <span className={styles.areaTriggerText}>{selectedAreaLabel}</span>
+                <ChevronDown
+                  size={12}
+                  className={`${styles.areaChevron} ${areaMenuOpen ? styles.areaChevronOpen : ""}`}
+                />
+              </button>
+              {areaMenuOpen && (
+                <div className={styles.areaMenu}>
+                  <button
+                    type="button"
+                    className={`${styles.areaOption} ${areaFilter === "" ? styles.areaOptionActive : ""}`}
+                    onClick={() => {
+                      setAreaFilter("");
+                      setAreaMenuOpen(false);
+                    }}
+                  >
+                    すべてのエリア
+                  </button>
+                  {areas.map((a) => (
+                    <button
+                      key={a.code}
+                      type="button"
+                      className={`${styles.areaOption} ${
+                        areaFilter === a.code ? styles.areaOptionActive : ""
+                      }`}
+                      onClick={() => {
+                        setAreaFilter(a.code);
+                        setAreaMenuOpen(false);
+                      }}
+                    >
+                      {a.code} — {a.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
           {!!voiceStatus && <div className={styles.voiceStatus}>{voiceStatus}</div>}
 
