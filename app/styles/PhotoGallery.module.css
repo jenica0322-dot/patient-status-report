@@ -1,0 +1,87 @@
+/* app/styles/PhotoGallery.module.css */
+
+.galleryEmpty {
+  text-align: center;
+  color: var(--secondary-text, #64748b);
+  padding: 2rem 0;
+}
+
+.galleryGroup {
+  margin-bottom: 1.25rem;
+}
+
+.galleryGroup:last-child {
+  margin-bottom: 0;
+}
+
+.galleryGroupLabel {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--secondary-text, #64748b);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 0.5rem;
+}
+
+.galleryGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: 0.6rem;
+}
+
+.galleryThumb {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--border-color, #e2e8f0);
+  cursor: pointer;
+  background: var(--secondary-bg, #f7fafa);
+  padding: 0;
+}
+
+.galleryThumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.galleryThumbDelete {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: none;
+  background: #fff;
+  color: var(--danger-red, #dc2626);
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+  transition: transform 0.15s ease, background-color 0.15s ease;
+}
+
+.galleryThumbDelete:hover {
+  background: var(--danger-red, #dc2626);
+  color: #fff;
+  transform: scale(1.08);
+}
+
+.galleryThumbDelete:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+@media (max-width: 480px) {
+  .galleryGrid {
+    grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+    gap: 0.5rem;
+  }
+}

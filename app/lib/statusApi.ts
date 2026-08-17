@@ -152,6 +152,79 @@ export function patientReportExportPdfUrl(patientId: number, yearMonth: string) 
   return `${API_BASE}/api/status-report/export-pdf?patient_id=${patientId}&year_month=${encodeURIComponent(yearMonth)}`;
 }
 
+// ===== Photos (attached to a status_records row) =====
+export interface StatusPhoto {
+  id: number;
+  url: string;
+  original_filename?: string | null;
+  created_at?: string;
+  record_date?: string | null;
+  record_year_month?: string | null;
+}
+
+export async function uploadStatusPhotos(params: {
+  screen_key: string;
+  patient_id: number;
+  record_date?: string;
+  record_year_month?: string;
+  files: File[];
+}): Promise<{ record_id: number; photos: StatusPhoto[] }> {
+  const fd = new FormData();
+  fd.append("screen_key", params.screen_key);
+  fd.append("patient_id", String(params.patient_id));
+  if (params.record_date) fd.append("record_date", params.record_date);
+  if (params.record_year_month) fd.append("record_year_month", params.record_year_month);
+  params.files.forEach((file) => fd.append("photos", file));
+
+  const r = await fetch(`${API_BASE}/api/status-records/photos`, {
+    method: "POST",
+    body: fd,
+  });
+  if (!r.ok) {
+    let detail = "";
+    try {
+      detail = (await r.json())?.error || "";
+    } catch {
+      /* ignore */
+    }
+    throw new Error(detail || "failed to upload photos");
+  }
+  return r.json();
+}
+
+export async function fetchRecordPhotos(params: {
+  screen_key: string;
+  patient_id: number;
+  record_date?: string;
+  record_year_month?: string;
+}): Promise<StatusPhoto[]> {
+  const search = new URLSearchParams();
+  search.set("screen_key", params.screen_key);
+  search.set("patient_id", String(params.patient_id));
+  if (params.record_date) search.set("record_date", params.record_date);
+  if (params.record_year_month) search.set("record_year_month", params.record_year_month);
+  const r = await fetch(`${API_BASE}/api/status-records/photos?${search.toString()}`, {
+    cache: "no-store",
+  });
+  if (!r.ok) throw new Error("failed to load photos");
+  return r.json();
+}
+
+export async function fetchReportPhotos(patientId: number, yearMonth: string): Promise<StatusPhoto[]> {
+  const r = await fetch(
+    `${API_BASE}/api/status-report/photos?patient_id=${patientId}&year_month=${encodeURIComponent(yearMonth)}`,
+    { cache: "no-store" }
+  );
+  if (!r.ok) throw new Error("failed to load report photos");
+  return r.json();
+}
+
+export async function deleteStatusPhoto(id: number) {
+  const r = await fetch(`${API_BASE}/api/photos/${id}`, { method: "DELETE" });
+  if (!r.ok) throw new Error("failed to delete photo");
+  return r.json();
+}
+
 // ===== Report =====
 export async function fetchPatientReport(patientId: number, yearMonth: string) {
   const r = await fetch(

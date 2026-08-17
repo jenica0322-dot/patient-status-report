@@ -289,7 +289,13 @@ thead.table-light,
   }
 }
 .animate-in {
-  animation: fadeInUp 0.35s var(--ease-standard) both;
+  /* No fill-mode: "both"/"forwards" would leave transform: translateY(0) applied
+     forever after the animation ends. A held (non-"none") transform on this
+     ancestor — even an identity one — makes it a containing block for any
+     position:fixed descendant (like PhotoLightbox), confining what should be a
+     full-viewport overlay to just this <main> box instead of covering the
+     whole screen. Letting the animation end normally avoids that entirely. */
+  animation: fadeInUp 0.35s var(--ease-standard);
 }
 
 @media (prefers-reduced-motion: reduce) {
