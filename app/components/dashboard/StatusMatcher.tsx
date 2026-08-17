@@ -2,16 +2,20 @@
 "use client";
 
 import { useState, useRef, useEffect, useMemo } from "react";
-import { MicFill, StopFill, CheckCircleFill, Circle, ChevronDown } from "react-bootstrap-icons";
+import { MicFill, StopFill, CheckCircleFill, Circle, ChevronDown, CameraFill, Trash } from "react-bootstrap-icons";
+import { Spinner } from "react-bootstrap";
 import styles from "@/app/styles/StatusMatcher.module.css";
 import {
   fetchStatusFields,
   saveStatusRecord,
   fetchStatusRecords,
+  uploadStatusPhotos,
+  StatusPhoto,
 } from "@/app/lib/statusApi";
 import { usePatient } from "@/app/context/PatientContext";
 import { JaDateInput, JaMonthInput } from "@/app/components/JaDatePicker";
 import PatientSelector from "@/app/components/dashboard/PatientSelector";
+import PhotoLightbox from "@/app/components/dashboard/PhotoLightbox";
 import { normalizeSpokenDigits } from "@/app/lib/voiceText";
 
 declare global {
@@ -127,6 +131,9 @@ function bestFieldMatch(utterance: string, fields: Field[]): Field | null {
 
 const AFFIRMATIVE = /^(よし|した|できた|チェック|レ|まる|○|✓|ok|オーケー)$/;
 const NEGATIVE = /^(なし|しない|できていない|ばつ|×|no)$/;
+// "写真アップロード" covers the recognizer dropping the を particle; "写真追加"
+// matches the visible button label so saying what's on screen also works.
+const PHOTO_UPLOAD_COMMAND = /^(写真を?アップロード|アップロード写真|写真追加|uploadphoto|photoupload)$/;
 const PATIENT_SELECT_FIELD_LABEL = "利用者選択";
 
 function pad2(n: number) {
@@ -233,8 +240,15 @@ export default function StatusMatcher() {
   const [patientVoiceText, setPatientVoiceText] = useState("");
   const [patientVoiceRequestId, setPatientVoiceRequestId] = useState(0);
   const [fieldMenuOpen, setFieldMenuOpen] = useState(false);
+  // Selected but not yet uploaded — local object URLs only, discarded unless 保存 is pressed.
+  const [pendingPhotos, setPendingPhotos] = useState<{ id: number; file: File; url: string }[]>([]);
+  const [savingRecord, setSavingRecord] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
   const fieldMenuRef = useRef<HTMLDivElement | null>(null);
+  const photoInputRef = useRef<HTMLInputElement | null>(null);
+  const pendingPhotosRef = useRef(pendingPhotos);
+  const pendingIdRef = useRef(0);
   const recognitionRef = useRef<any>(null);
   const isListeningRef = useRef(false);
   const lastFinalRef = useRef<string>("");
@@ -279,6 +293,17 @@ export default function StatusMatcher() {
     yearMonthRef.current = yearMonth;
   }, [yearMonth]);
 
+  useEffect(() => {
+    pendingPhotosRef.current = pendingPhotos;
+  }, [pendingPhotos]);
+
+  // Revoke any still-unsaved preview URLs on unmount so they don't leak.
+  useEffect(() => {
+    return () => {
+      pendingPhotosRef.current.forEach((p) => URL.revokeObjectURL(p.url));
+    };
+  }, []);
+
   // Load master fields whenever the screen changes.
   useEffect(() => {
     (async () => {
@@ -306,6 +331,53 @@ export default function StatusMatcher() {
       }
     })();
   }, [selectedPatient, screenKey, recordDate, yearMonth]);
+
+  // Switching patient/date/screen discards any not-yet-saved previews — they
+  // were staged for whichever record was showing when they were picked.
+  useEffect(() => {
+    pendingPhotosRef.current.forEach((p) => URL.revokeObjectURL(p.url));
+    setPendingPhotos([]);
+  }, [selectedPatient, screenKey, recordDate, yearMonth]);
+
+  // The strip here is a staging area only — once 保存 uploads them they're
+  // dropped from view immediately after. 対象フィールド has no photo history of
+  // its own; 報告書's 写真を見る is the only place saved photos are browsed.
+  const pendingDisplay = useMemo<StatusPhoto[]>(
+    () =>
+      pendingPhotos.map((p) => ({
+        id: p.id,
+        url: p.url,
+        original_filename: p.file.name,
+      })),
+    [pendingPhotos]
+  );
+
+  const handlePhotoButtonClick = () => photoInputRef.current?.click();
+
+  // Just stages local previews — nothing is sent to the server until 保存 is pressed.
+  const handlePhotoFilesSelected = (fileList: FileList | null) => {
+    if (!fileList || fileList.length === 0) return;
+    const items = Array.from(fileList).map((file) => {
+      pendingIdRef.current -= 1;
+      return { id: pendingIdRef.current, file, url: URL.createObjectURL(file) };
+    });
+    setPendingPhotos((prev) => [...prev, ...items]);
+    if (photoInputRef.current) photoInputRef.current.value = "";
+  };
+
+  const handleRemovePendingPhoto = (photo: StatusPhoto) => {
+    setPendingPhotos((prev) => {
+      const target = prev.find((p) => p.id === photo.id);
+      if (target) URL.revokeObjectURL(target.url);
+      return prev.filter((p) => p.id !== photo.id);
+    });
+    setLightboxIndex((idx) => {
+      if (idx === null) return idx;
+      const remaining = pendingPhotos.filter((p) => p.id !== photo.id);
+      if (remaining.length === 0) return null;
+      return Math.min(idx, remaining.length - 1);
+    });
+  };
 
   const focusField = useMemo(
     () => fields.find((f) => f.field_key === focusKey),
@@ -526,6 +598,12 @@ export default function StatusMatcher() {
       return;
     }
 
+    if (PHOTO_UPLOAD_COMMAND.test(normalizeJa(rawFinal))) {
+      handlePhotoButtonClick();
+      setStatusMsg("📷 写真選択ダイアログを開きました");
+      return;
+    }
+
     // Date commands take priority over Target Field dictation — the 記録日/対象年月
     // field sits outside the fields list (it's not voice-selectable via bestFieldMatch),
     // so recognizing it here is the only way to reach it by voice. This is checked
@@ -633,66 +711,145 @@ export default function StatusMatcher() {
     }
   };
 
-  const handleSaveRecord = () => {
+  const handleSaveRecord = async () => {
     const patient = selectedPatientRef.current;
     if (!patient) {
       setStatusMsg("❌ 利用者が選択されていません");
       return;
     }
     const screen = screenKeyRef.current;
-    const params =
+    const baseParams =
       screen === "daily_status"
-        ? { screen_key: screen, patient_id: patient.id, record_date: recordDateRef.current, values: valuesRef.current }
-        : { screen_key: screen, patient_id: patient.id, record_year_month: yearMonthRef.current, values: valuesRef.current };
+        ? { screen_key: screen, patient_id: patient.id, record_date: recordDateRef.current }
+        : { screen_key: screen, patient_id: patient.id, record_year_month: yearMonthRef.current };
 
-    saveStatusRecord(params)
-      .then(() => {
+    setSavingRecord(true);
+    try {
+      await saveStatusRecord({ ...baseParams, values: valuesRef.current });
+
+      // Pending previews are only actually uploaded once the record itself has saved.
+      const toUpload = pendingPhotosRef.current;
+      if (toUpload.length > 0) {
+        // Uploaded and attached to the record now — drop the local previews
+        // immediately rather than folding the server copies back into view.
+        await uploadStatusPhotos({ ...baseParams, files: toUpload.map((p) => p.file) });
+        toUpload.forEach((p) => URL.revokeObjectURL(p.url));
+        setPendingPhotos([]);
+        setStatusMsg(`✅ 保存しました（写真${toUpload.length}枚を含む）`);
+      } else {
         setStatusMsg("✅ 保存しました");
-        setMatches([]);
-        setMatchStatus("none");
-        setTranscript("");
-        lastFinalRef.current = "";
-        // Force a clean recognition instance after save so voice input keeps
-        // accepting commands even if the browser silently ended the session
-        // during the save (see createRecognition/restartRecognition above).
-        if (isListeningRef.current) restartRecognition();
-      })
-      .catch(() => setStatusMsg("❌ 保存に失敗しました"));
+      }
+
+      setMatches([]);
+      setMatchStatus("none");
+      setTranscript("");
+      lastFinalRef.current = "";
+      // Force a clean recognition instance after save so voice input keeps
+      // accepting commands even if the browser silently ended the session
+      // during the save (see createRecognition/restartRecognition above).
+      if (isListeningRef.current) restartRecognition();
+    } catch (e) {
+      console.error("save failed", e);
+      setStatusMsg("❌ 保存に失敗しました");
+    } finally {
+      setSavingRecord(false);
+    }
   };
 
   return (
     <div className={styles.wrapper}>
       {selectedPatient && (
         <div className={styles.scopeBar}>
-          <div className="d-flex gap-2">
-            {SCREENS.map((s) => (
-              <button
-                key={s.key}
-                type="button"
-                className={`btn btn-sm ${screenKey === s.key ? "btn-primary" : "btn-outline-primary"}`}
-                onClick={() => setScreenKey(s.key)}
-              >
-                {s.label}
-              </button>
-            ))}
+          <div className={styles.scopeBarControls}>
+            <div className="d-flex gap-2">
+              {SCREENS.map((s) => (
+                <button
+                  key={s.key}
+                  type="button"
+                  className={`btn btn-sm ${screenKey === s.key ? "btn-primary" : "btn-outline-primary"}`}
+                  onClick={() => setScreenKey(s.key)}
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
+            {screenKey === "daily_status" ? (
+              <JaDateInput
+                className="form-control form-control-sm"
+                value={recordDate}
+                onChange={setRecordDate}
+              />
+            ) : (
+              <JaMonthInput
+                className="form-control form-control-sm"
+                value={yearMonth}
+                onChange={setYearMonth}
+              />
+            )}
+            <button
+              type="button"
+              className={`btn btn-sm btn-outline-primary ${styles.photoUploadBtn}`}
+              onClick={handlePhotoButtonClick}
+            >
+              <CameraFill size={14} />
+              <span>写真追加</span>
+            </button>
+            <input
+              ref={photoInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              className="d-none"
+              onChange={(e) => handlePhotoFilesSelected(e.target.files)}
+            />
+            <button
+              type="button"
+              className="btn btn-sm btn-success ms-auto"
+              onClick={handleSaveRecord}
+              disabled={savingRecord}
+            >
+              {savingRecord && <Spinner key="saving-spinner" className="me-1" animation="border" size="sm" />}
+              <span>保存</span>
+            </button>
           </div>
-          {screenKey === "daily_status" ? (
-            <JaDateInput
-              className="form-control form-control-sm"
-              value={recordDate}
-              onChange={setRecordDate}
-            />
-          ) : (
-            <JaMonthInput
-              className="form-control form-control-sm"
-              value={yearMonth}
-              onChange={setYearMonth}
-            />
+
+          {pendingDisplay.length > 0 && (
+            <div className={styles.photoStrip}>
+              {pendingDisplay.map((photo, i) => (
+                <div
+                  key={photo.id}
+                  className={`${styles.photoThumb} ${styles.photoThumbPending}`}
+                  onClick={() => setLightboxIndex(i)}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={photo.url} alt={photo.original_filename || "写真"} />
+                  <span className={styles.photoThumbPendingBadge}>未保存</span>
+                  <button
+                    type="button"
+                    className={styles.photoThumbDelete}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleRemovePendingPhoto(photo);
+                    }}
+                    title="削除"
+                  >
+                    <Trash size={11} />
+                  </button>
+                </div>
+              ))}
+            </div>
           )}
-          <button type="button" className="btn btn-sm btn-success ms-auto" onClick={handleSaveRecord}>
-            保存
-          </button>
         </div>
+      )}
+
+      {lightboxIndex !== null && (
+        <PhotoLightbox
+          photos={pendingDisplay}
+          index={lightboxIndex}
+          onClose={() => setLightboxIndex(null)}
+          onIndexChange={setLightboxIndex}
+          onDelete={handleRemovePendingPhoto}
+        />
       )}
 
       <div className={styles.targetBox}>
@@ -852,7 +1009,7 @@ export default function StatusMatcher() {
           <p>{transcript}</p>
         ) : (
           <p className={styles.placeholder}>
-            マイクで話してください…（例：「完食」「よし」「コメント〜」「今日」「8月6日」「保存」「やまだたろう」「12345」）
+            マイクで話してください…（例：「完食」「よし」「コメント〜」「今日」「8月6日」「保存」「やまだたろう」「12345」「写真をアップロード」）
           </p>
         )}
       </div>

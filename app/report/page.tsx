@@ -3,8 +3,8 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
-import { Container, Row, Col, Card, Form, Spinner, Alert, Button } from "react-bootstrap";
-import { FileText, Calendar, FileEarmarkExcel, FileEarmarkPdf } from "react-bootstrap-icons";
+import { Container, Row, Col, Card, Form, Spinner, Alert, Button, Modal } from "react-bootstrap";
+import { FileText, Calendar, FileEarmarkExcel, FileEarmarkPdf, Images, Trash } from "react-bootstrap-icons";
 import Link from "next/link";
 import Layout from "../components/layout/Layout";
 import { JaMonthInput } from "../components/JaDatePicker";
@@ -14,7 +14,12 @@ import {
   fetchPatientReport,
   patientReportExportUrl,
   patientReportExportPdfUrl,
+  fetchReportPhotos,
+  deleteStatusPhoto,
+  StatusPhoto,
 } from "../lib/statusApi";
+import PhotoLightbox from "../components/dashboard/PhotoLightbox";
+import galleryStyles from "../styles/PhotoGallery.module.css";
 import {
   ReportField,
   TALLY_GROUPS,
@@ -67,6 +72,11 @@ export default function ReportPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [reportPhotos, setReportPhotos] = useState<StatusPhoto[]>([]);
+  const [showGallery, setShowGallery] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const [deletingPhotoId, setDeletingPhotoId] = useState<number | null>(null);
+
   useEffect(() => {
     fetchStatusFields("daily_status").then(setDailyFields).catch(() => {});
     fetchStatusFields("monthly_report").then(setMonthlyFields).catch(() => {});
@@ -91,6 +101,51 @@ export default function ReportPage() {
       }
     })();
   }, [patientId, yearMonth]);
+
+  useEffect(() => {
+    if (!patientId) {
+      setReportPhotos([]);
+      return;
+    }
+    fetchReportPhotos(patientId, yearMonth)
+      .then(setReportPhotos)
+      .catch((e) => {
+        console.error("failed to load report photos", e);
+        setReportPhotos([]);
+      });
+  }, [patientId, yearMonth]);
+
+  const photoGroups = useMemo(() => {
+    const groups = new Map<string, StatusPhoto[]>();
+    for (const photo of reportPhotos) {
+      const label = photo.record_date
+        ? `${photo.record_date}`
+        : photo.record_year_month
+        ? `${photo.record_year_month}（月次報告）`
+        : "その他";
+      if (!groups.has(label)) groups.set(label, []);
+      groups.get(label)!.push(photo);
+    }
+    return Array.from(groups.entries());
+  }, [reportPhotos]);
+
+  const handleDeleteReportPhoto = async (photo: StatusPhoto) => {
+    setDeletingPhotoId(photo.id);
+    try {
+      await deleteStatusPhoto(photo.id);
+      setReportPhotos((prev) => prev.filter((p) => p.id !== photo.id));
+      setLightboxIndex((idx) => {
+        if (idx === null) return idx;
+        const remaining = reportPhotos.filter((p) => p.id !== photo.id);
+        if (remaining.length === 0) return null;
+        return Math.min(idx, remaining.length - 1);
+      });
+    } catch (e) {
+      console.error("failed to delete photo", e);
+    } finally {
+      setDeletingPhotoId(null);
+    }
+  };
 
   const dfByKey = useMemo(
     () => Object.fromEntries(dailyFields.map((f) => [f.field_key, f])),
@@ -198,6 +253,16 @@ export default function ReportPage() {
               <Col md={3} className="text-md-end">
                 {patientId && (
                   <div className="d-flex gap-2 justify-content-md-end">
+                    <Button
+                      variant="outline-primary"
+                      size="sm"
+                      className="text-nowrap"
+                      onClick={() => setShowGallery(true)}
+                      disabled={reportPhotos.length === 0}
+                    >
+                      <Images className="me-1" />
+                      写真を見る{reportPhotos.length > 0 ? `（${reportPhotos.length}）` : ""}
+                    </Button>
                     <a
                       className="btn btn-success btn-sm text-nowrap"
                       href={patientReportExportUrl(patientId, yearMonth)}
@@ -438,6 +503,71 @@ export default function ReportPage() {
           </Card>
         )}
       </Container>
+
+      <Modal show={showGallery} onHide={() => setShowGallery(false)} centered size="xl" scrollable>
+        <Modal.Header closeButton>
+          <Modal.Title>
+            写真一覧 {report?.patient?.name ? `｜${report.patient.name}` : ""}
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          {photoGroups.length === 0 ? (
+            <p className={galleryStyles.galleryEmpty}>この月にアップロードされた写真はありません</p>
+          ) : (
+            photoGroups.map(([label, groupPhotos]) => (
+              <div key={label} className={galleryStyles.galleryGroup}>
+                <div className={galleryStyles.galleryGroupLabel}>{label}</div>
+                <div className={galleryStyles.galleryGrid}>
+                  {groupPhotos.map((photo) => (
+                    <div
+                      key={photo.id}
+                      className={galleryStyles.galleryThumb}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => setLightboxIndex(reportPhotos.findIndex((p) => p.id === photo.id))}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          setLightboxIndex(reportPhotos.findIndex((p) => p.id === photo.id));
+                        }
+                      }}
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={photo.url} alt={photo.original_filename || "写真"} />
+                      <button
+                        type="button"
+                        className={galleryStyles.galleryThumbDelete}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteReportPhoto(photo);
+                        }}
+                        disabled={deletingPhotoId === photo.id}
+                        title="削除"
+                      >
+                        {deletingPhotoId === photo.id ? (
+                          <Spinner animation="border" size="sm" />
+                        ) : (
+                          <Trash size={12} />
+                        )}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))
+          )}
+        </Modal.Body>
+      </Modal>
+
+      {lightboxIndex !== null && (
+        <PhotoLightbox
+          photos={reportPhotos}
+          index={lightboxIndex}
+          onClose={() => setLightboxIndex(null)}
+          onIndexChange={setLightboxIndex}
+          onDelete={handleDeleteReportPhoto}
+          deletingId={deletingPhotoId}
+        />
+      )}
     </Layout>
   );
 }
