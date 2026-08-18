@@ -55,19 +55,24 @@ const uploadPhotos = async (req, res) => {
 
     const recordId = await findOrCreateRecordId({ screen_key, patient_id, record_date, record_year_month });
 
-    const photos = [];
-    for (const file of files) {
-      const result = await pool.query(
+    // Only one photo is kept per patient per day (or per month, for monthly
+    // reports) — a new upload replaces whatever was already on this record,
+    // so the View section always shows just the latest. If several files are
+    // submitted in one request, only the last one is kept.
+    const file = files[files.length - 1];
+    const photo = await pool.tx(async (client) => {
+      await client.query(`DELETE FROM status_record_photos WHERE status_record_id = $1`, [recordId]);
+      const result = await client.query(
         `INSERT INTO status_record_photos
            (status_record_id, patient_id, mime_type, original_filename, file_size, file_data)
          VALUES ($1,$2,$3,$4,$5,$6)
          RETURNING id, original_filename, created_at`,
         [recordId, patient_id, file.mimetype, file.originalname, file.size, file.buffer]
       );
-      photos.push(toPhotoDto(result.rows[0]));
-    }
+      return toPhotoDto(result.rows[0]);
+    });
 
-    res.json({ record_id: recordId, photos });
+    res.json({ record_id: recordId, photos: [photo] });
   } catch (e) {
     console.error("uploadPhotos error:", e);
     res.status(500).json({ error: "internal", detail: e.message });

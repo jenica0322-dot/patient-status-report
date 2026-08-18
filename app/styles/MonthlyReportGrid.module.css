@@ -144,6 +144,40 @@
   }
 }
 
+/* The toolbar's available width depends on the sidebar's expanded/collapsed
+   state, not just the viewport — Bootstrap's col-md breakpoints only look at
+   viewport width, so on tablet-width screens (e.g. iPad mini, in either
+   orientation) the sidebar can leave less room than col-md assumes, cramming
+   記録月 and the action buttons together. Container queries react to this
+   element's actual rendered width instead, so the fields stack whenever
+   there truly isn't room, regardless of viewport size or sidebar state —
+   full desktop windows stay on the unstacked 5/4/3 layout as before. */
+.toolbarCard {
+  container-type: inline-size;
+}
+
+.toolbarActions {
+  flex-wrap: wrap;
+  row-gap: 0.5rem;
+}
+
+@container (max-width: 900px) {
+  .toolbarUserCol,
+  .toolbarDateCol,
+  .toolbarActionsCol {
+    flex: 0 0 100%;
+    max-width: 100%;
+  }
+
+  .toolbarActionsCol {
+    text-align: left !important;
+  }
+
+  .toolbarActions {
+    justify-content: flex-start !important;
+  }
+}
+
 @media print {
   .noPrint {
     display: none !important;

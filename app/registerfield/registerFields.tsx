@@ -166,7 +166,7 @@ export default function RegisterFields() {
       </div>
 
       <Row className="justify-content-center">
-        <Col lg={10} xl={8}>
+        <Col lg={11} xl={10}>
           <Card>
             <Card.Body>
               {message && (
@@ -191,7 +191,7 @@ export default function RegisterFields() {
               </Form.Group>
 
               <Row>
-                <Col md={8}>
+                <Col md={7}>
                   <Card className="mb-4">
                     <Card.Header>
                       <Database className="me-2" />
@@ -324,7 +324,7 @@ export default function RegisterFields() {
                   </Card>
                 </Col>
 
-                <Col md={4}>
+                <Col md={5}>
                   <Card>
                     <Card.Header>
                       <List className="me-2" />
@@ -344,14 +344,14 @@ export default function RegisterFields() {
                           {fields.map((f) => (
                             <div key={`${f.screen_key}-${f.field_key}`} className="list-group-item">
                               <div className="d-flex justify-content-between align-items-start">
-                                <div className="flex-grow-1">
+                                <div className="flex-grow-1 me-2" style={{ minWidth: 0 }}>
                                   <h6 className="mb-1">{f.field_label}</h6>
                                   <small className="text-muted">
                                     {f.field_key} • {f.field_type}
                                     {f.phrases?.length > 0 && ` • ${f.phrases.length}フレーズ`}
                                   </small>
                                 </div>
-                                <div>
+                                <div className="flex-shrink-0 d-flex">
                                   <Button
                                     variant="outline-primary"
                                     size="sm"
