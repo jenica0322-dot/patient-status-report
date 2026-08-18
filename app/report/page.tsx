@@ -216,10 +216,10 @@ export default function ReportPage() {
           </div>
         </div>
 
-        <Card className={`mb-4 ${styles.noPrint}`}>
+        <Card className={`mb-4 ${styles.noPrint} ${styles.toolbarCard}`}>
           <Card.Body>
             <Row className="g-3 align-items-end">
-              <Col md={5}>
+              <Col md={5} className={styles.toolbarUserCol}>
                 <Form.Label>利用者</Form.Label>
                 {selectedPatient ? (
                   <div className="form-control bg-light">
@@ -239,7 +239,7 @@ export default function ReportPage() {
                   </div>
                 )}
               </Col>
-              <Col md={4}>
+              <Col md={4} className={styles.toolbarDateCol}>
                 <Form.Label>
                   <Calendar className="me-1" />
                   記録月
@@ -250,9 +250,9 @@ export default function ReportPage() {
                   onChange={setYearMonth}
                 />
               </Col>
-              <Col md={3} className="text-md-end">
+              <Col md={3} className={`text-md-end ${styles.toolbarActionsCol}`}>
                 {patientId && (
-                  <div className="d-flex gap-2 justify-content-md-end">
+                  <div className={`d-flex gap-2 justify-content-md-end ${styles.toolbarActions}`}>
                     <Button
                       variant="outline-primary"
                       size="sm"

@@ -354,14 +354,18 @@ export default function StatusMatcher() {
 
   const handlePhotoButtonClick = () => photoInputRef.current?.click();
 
-  // Just stages local previews — nothing is sent to the server until 保存 is pressed.
+  // Just stages a local preview — nothing is sent to the server until 保存 is
+  // pressed. Only one photo per patient per day is kept, so picking a new
+  // file replaces whatever was already staged rather than adding to it.
   const handlePhotoFilesSelected = (fileList: FileList | null) => {
     if (!fileList || fileList.length === 0) return;
-    const items = Array.from(fileList).map((file) => {
-      pendingIdRef.current -= 1;
-      return { id: pendingIdRef.current, file, url: URL.createObjectURL(file) };
+    const file = fileList[0];
+    pendingIdRef.current -= 1;
+    const item = { id: pendingIdRef.current, file, url: URL.createObjectURL(file) };
+    setPendingPhotos((prev) => {
+      prev.forEach((p) => URL.revokeObjectURL(p.url));
+      return [item];
     });
-    setPendingPhotos((prev) => [...prev, ...items]);
     if (photoInputRef.current) photoInputRef.current.value = "";
   };
 
@@ -798,7 +802,6 @@ export default function StatusMatcher() {
               ref={photoInputRef}
               type="file"
               accept="image/*"
-              multiple
               className="d-none"
               onChange={(e) => handlePhotoFilesSelected(e.target.files)}
             />
