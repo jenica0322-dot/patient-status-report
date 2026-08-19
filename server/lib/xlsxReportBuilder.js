@@ -93,7 +93,7 @@ async function buildReportWorkbook({ data, dailyFields, monthlyFields }) {
   mergeAndStyle(ws, row, 1, row, 2, "利用者名", { bold: true, fill: NAVY, color: WHITE });
   mergeAndStyle(ws, row, 3, row, 7, data.patient.name || "", { align: "left" });
   mergeAndStyle(ws, row, 8, row, 9, "記録月", { bold: true, fill: NAVY, color: WHITE });
-  mergeAndStyle(ws, row, 10, row, 17, `${Number(y)}年　${Number(m)}月`, { align: "left" });
+  mergeAndStyle(ws, row, 10, row, TOTAL_COLS, `${Number(y)}年　${Number(m)}月`, { align: "left" });
   row++;
 
   mergeAndStyle(ws, row, 1, row, 2, "配送担当", { bold: true, fill: NAVY, color: WHITE });
@@ -112,7 +112,7 @@ async function buildReportWorkbook({ data, dailyFields, monthlyFields }) {
     row,
     10,
     row,
-    17,
+    TOTAL_COLS,
     mfByKey.shokuji_naiyo ? checklistText(mfByKey.shokuji_naiyo, monthlyValues.shokuji_naiyo) : "",
     { align: "left" }
   );
@@ -126,7 +126,7 @@ async function buildReportWorkbook({ data, dailyFields, monthlyFields }) {
     row,
     10,
     row,
-    17,
+    TOTAL_COLS,
     mfByKey.renraku_hoho ? checklistText(mfByKey.renraku_hoho, monthlyValues.renraku_hoho) : "",
     { align: "left" }
   );
@@ -137,14 +137,23 @@ async function buildReportWorkbook({ data, dailyFields, monthlyFields }) {
   mergeAndStyle(ws, row, 6, row, 7, "先方担当者", { bold: true, fill: NAVY, color: WHITE });
   mergeAndStyle(ws, row, 8, row, 10, textWithComment(monthlyValues.senpo_tantosha), { align: "left" });
   mergeAndStyle(ws, row, 11, row, 12, "記入者", { bold: true, fill: NAVY, color: WHITE });
-  mergeAndStyle(ws, row, 13, row, 17, textWithComment(monthlyValues.kinyusha), { align: "left" });
+  mergeAndStyle(ws, row, 13, row, TOTAL_COLS, textWithComment(monthlyValues.kinyusha), { align: "left" });
   row++;
 
   row++; // spacer
 
   // ---- Daily grid ----
   const headerRow = row;
-  const headerCells = ["日", dfByKey.youbi?.field_label || "曜", dfByKey.uketori?.field_label || "受取"];
+  // 配食者名/利用者確認印 are print-only columns for handwritten fill-in on the
+  // printed sheet — not backed by a status_fields row, so they never appear in
+  // the Status Input 対象フィールド picker.
+  const headerCells = [
+    "日",
+    dfByKey.youbi?.field_label || "曜",
+    "配食者名",
+    "利用者確認印",
+    dfByKey.uketori?.field_label || "受取",
+  ];
   orderedDailyBody.forEach((f) => headerCells.push(f.field_label));
   headerCells.forEach((label, idx) => {
     const cell = ws.getCell(headerRow, idx + 1);
@@ -155,6 +164,7 @@ async function buildReportWorkbook({ data, dailyFields, monthlyFields }) {
   row++;
 
   const dayRowByDate = new Map(data.days.map((d) => [d.record_date, d]));
+  const photoDates = new Set(data.photoDates || []);
   for (let day = 1; day <= data.daysInMonth; day++) {
     const iso = `${data.yearMonth}-${String(day).padStart(2, "0")}`;
     const dayRow = dayRowByDate.get(iso);
@@ -169,12 +179,20 @@ async function buildReportWorkbook({ data, dailyFields, monthlyFields }) {
     weekdayCell.value = rawValue(values.youbi) || WEEKDAY_JA[dateObj.getDay()];
     styleCell(weekdayCell, { fill: GRAY, size: 9 });
 
-    const uketoriCell = ws.getCell(row, 3);
+    // 配食者名 — blank print-only cell, filled in by hand after printing.
+    styleCell(ws.getCell(row, 3), { fill: GRAY, size: 9 });
+
+    // 利用者確認印 — ○ when a photo was uploaded for this day (写真を見る), else blank.
+    const kakuninCell = ws.getCell(row, 4);
+    kakuninCell.value = photoDates.has(iso) ? "○" : "";
+    styleCell(kakuninCell, { fill: GRAY, size: 9 });
+
+    const uketoriCell = ws.getCell(row, 5);
     uketoriCell.value = textWithComment(values.uketori);
     styleCell(uketoriCell, { fill: GRAY, size: 9, align: "left" });
 
     orderedDailyBody.forEach((f, idx) => {
-      const cell = ws.getCell(row, 4 + idx);
+      const cell = ws.getCell(row, 6 + idx);
       const fv = values[f.field_key];
       if (f.field_type === "checkbox") {
         cell.value = isChecked(fv) ? "✓" : "";
@@ -291,7 +309,8 @@ async function buildReportWorkbook({ data, dailyFields, monthlyFields }) {
     { align: "left", size: 9 }
   );
 
-  ws.pageSetup.printArea = `A1:Q${row}`;
+  const lastColLetter = String.fromCharCode(64 + TOTAL_COLS); // TOTAL_COLS <= 26
+  ws.pageSetup.printArea = `A1:${lastColLetter}${row}`;
 
   return workbook;
 }

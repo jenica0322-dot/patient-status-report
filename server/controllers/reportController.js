@@ -109,6 +109,17 @@ async function loadReportData(patientId, yearMonth) {
     [patientId, yearMonth]
   );
 
+  // Which days have a photo attached (any record, same set 写真を見る shows) —
+  // drives the 利用者確認印 column's ○ mark. record_date is only non-null on
+  // daily records, so this naturally excludes monthly-report-only photos.
+  const photoDatesResult = await primary().query(
+    `SELECT DISTINCT r.record_date
+     FROM status_record_photos p
+     JOIN status_records r ON r.id = p.status_record_id
+     WHERE p.patient_id = $1 AND r.record_date BETWEEN $2 AND $3`,
+    [patientId, from, to]
+  );
+
   return {
     patient,
     yearMonth,
@@ -116,6 +127,7 @@ async function loadReportData(patientId, yearMonth) {
     days: dailyResult.rows,
     tallies,
     monthlyReport: monthlyResult.rows[0]?.values || null,
+    photoDates: photoDatesResult.rows.map((r) => r.record_date),
   };
 }
 

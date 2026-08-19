@@ -21,7 +21,7 @@
 }
 
 .sidebarExpanded {
-  width: 260px;
+  width: 220px;
 }
 
 .contentWrapper {
@@ -38,7 +38,7 @@
 }
 
 .contentWrapperExpanded {
-  margin-left: 260px;
+  margin-left: 220px;
 }
 
 @media (max-width: 767.98px) {

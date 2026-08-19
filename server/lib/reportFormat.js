@@ -1,7 +1,7 @@
 // server/lib/reportFormat.js
 // Shared data-shaping helpers for the 状況記録表兼報告書 export builders (xlsx + pdf).
 // Colors are plain RRGGBB; each builder adapts them to its own color format.
-const TOTAL_COLS = 17;
+const TOTAL_COLS = 19;
 
 // UI-only helper field (switches the voice-input focus to the patient picker) — not
 // part of the printed template, so exports drop it the same way the on-screen grid does.

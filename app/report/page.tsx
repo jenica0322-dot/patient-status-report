@@ -107,12 +107,25 @@ export default function ReportPage() {
       setReportPhotos([]);
       return;
     }
-    fetchReportPhotos(patientId, yearMonth)
-      .then(setReportPhotos)
-      .catch((e) => {
-        console.error("failed to load report photos", e);
-        setReportPhotos([]);
-      });
+    let cancelled = false;
+    const load = () => {
+      fetchReportPhotos(patientId, yearMonth)
+        .then((photos) => {
+          if (!cancelled) setReportPhotos(photos);
+        })
+        .catch((e) => {
+          console.error("failed to load report photos", e);
+          if (!cancelled) setReportPhotos([]);
+        });
+    };
+    load();
+    // A photo can be added from Status Input (写真追加) in another tab/screen —
+    // poll so 利用者確認印 picks it up here without a manual page refresh.
+    const intervalId = setInterval(load, 8000);
+    return () => {
+      cancelled = true;
+      clearInterval(intervalId);
+    };
   }, [patientId, yearMonth]);
 
   const photoGroups = useMemo(() => {
@@ -183,14 +196,23 @@ export default function ReportPage() {
     (report?.days || []).forEach((d: any) => m.set(d.record_date, d));
     return m;
   }, [report]);
+  // Drives 利用者確認印's ○ mark. Derived from reportPhotos (not report.photoDates,
+  // a one-time snapshot from the initial fetch) so it updates immediately when a
+  // photo is deleted here, or picked up by the polling above.
+  const photoDateSet = useMemo(
+    () => new Set(reportPhotos.filter((p) => p.record_date).map((p) => p.record_date as string)),
+    [reportPhotos]
+  );
 
   const [y, m] = yearMonth.split("-");
 
-  // 日/曜/受取 + one column per daily field. The header-block rows above the grid
-  // are hand-tuned to this specific 17-column template (16 daily_status fields);
-  // the sections below derive their spans from it so they stay aligned if a
-  // field is added or removed in registerfield.
-  const totalCols = 3 + orderedDailyBody.length;
+  // 日/曜/配食者名/利用者確認印/受取 + one column per daily field. 配食者名 and
+  // 利用者確認印 are print-only columns for handwritten fill-in — not backed by a
+  // status_fields row, so they never show up in the Status Input 対象フィールド
+  // picker. The header-block rows above the grid are hand-tuned to this specific
+  // 19-column template (16 daily_status fields); the sections below derive their
+  // spans from it so they stay aligned if a field is added or removed in registerfield.
+  const totalCols = 5 + orderedDailyBody.length;
   const commentColSpan = totalCols - 8; // 分類(2) + 確認項目(4) + 件数(2)
   const footerShareColSpan = totalCols - 14; // 報告日(2+4) + 確認者(2+3) + label(3)
 
@@ -315,7 +337,7 @@ export default function ReportPage() {
                     <td className={styles.labelCell} colSpan={2}>
                       記録月
                     </td>
-                    <td className={styles.valueCell} colSpan={8}>
+                    <td className={styles.valueCell} colSpan={10}>
                       {Number(y)}年　{Number(m)}月
                     </td>
                   </tr>
@@ -329,7 +351,7 @@ export default function ReportPage() {
                     <td className={styles.labelCell} colSpan={2}>
                       食事内容
                     </td>
-                    <td className={styles.valueCell} colSpan={8}>
+                    <td className={styles.valueCell} colSpan={10}>
                       <Checklist field={mfByKey.shokuji_naiyo} value={monthlyValues.shokuji_naiyo} />
                     </td>
                   </tr>
@@ -343,7 +365,7 @@ export default function ReportPage() {
                     <td className={styles.labelCell} colSpan={2}>
                       連絡方法
                     </td>
-                    <td className={styles.valueCell} colSpan={8}>
+                    <td className={styles.valueCell} colSpan={10}>
                       <Checklist field={mfByKey.renraku_hoho} value={monthlyValues.renraku_hoho} />
                     </td>
                   </tr>
@@ -363,15 +385,19 @@ export default function ReportPage() {
                     <td className={styles.labelCell} colSpan={2}>
                       記入者
                     </td>
-                    <td className={styles.valueCell} colSpan={5}>
+                    <td className={styles.valueCell} colSpan={7}>
                       {textWithComment(monthlyValues.kinyusha)}
                     </td>
                   </tr>
 
-                  {/* Daily grid header */}
+                  {/* Daily grid header. 配食者名/利用者確認印 are print-only columns for
+                      handwritten fill-in — not backed by a status_fields row, so they never
+                      show up in the Status Input 対象フィールド picker. */}
                   <tr className={styles.headerRow}>
                     <th style={{ width: 32 }}>日</th>
                     <th style={{ width: 36 }}>{dfByKey.youbi?.field_label || "曜"}</th>
+                    <th style={{ width: 72 }}>配食者名</th>
+                    <th style={{ width: 72 }}>利用者確認印</th>
                     <th style={{ width: 64 }}>{dfByKey.uketori?.field_label || "受取"}</th>
                     {orderedDailyBody.map((f) => (
                       <th key={f.field_key}>{f.field_label}</th>
@@ -389,6 +415,10 @@ export default function ReportPage() {
                       <tr key={iso}>
                         <td className={styles.colDay}>{day}</td>
                         <td className={styles.colWeekday}>{weekday}</td>
+                        <td className={styles.colHaitatsusha}></td>
+                        <td className={styles.colKakuninin}>
+                          {photoDateSet.has(iso) && <span className={styles.kakuninMark}>○</span>}
+                        </td>
                         <td className={styles.colUketori}>{textWithComment(values.uketori)}</td>
                         {orderedDailyBody.map((f) => (
                           <td key={f.field_key} className={groupColClass(styles, FIELD_GROUP[f.field_key])}>
@@ -409,7 +439,7 @@ export default function ReportPage() {
 
                   {/* 月次報告欄 */}
                   <tr>
-                    <td colSpan={3 + orderedDailyBody.length} className={styles.sectionBar}>
+                    <td colSpan={totalCols} className={styles.sectionBar}>
                       月次報告欄
                     </td>
                   </tr>

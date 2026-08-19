@@ -16,6 +16,7 @@ import { usePatient } from "@/app/context/PatientContext";
 import { JaDateInput, JaMonthInput } from "@/app/components/JaDatePicker";
 import PatientSelector from "@/app/components/dashboard/PatientSelector";
 import PhotoLightbox from "@/app/components/dashboard/PhotoLightbox";
+import CameraCapture from "@/app/components/dashboard/CameraCapture";
 import { normalizeSpokenDigits } from "@/app/lib/voiceText";
 
 declare global {
@@ -244,6 +245,7 @@ export default function StatusMatcher() {
   const [pendingPhotos, setPendingPhotos] = useState<{ id: number; file: File; url: string }[]>([]);
   const [savingRecord, setSavingRecord] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const [cameraOpen, setCameraOpen] = useState(false);
 
   const fieldMenuRef = useRef<HTMLDivElement | null>(null);
   const photoInputRef = useRef<HTMLInputElement | null>(null);
@@ -352,20 +354,38 @@ export default function StatusMatcher() {
     [pendingPhotos]
   );
 
-  const handlePhotoButtonClick = () => photoInputRef.current?.click();
+  // 写真追加 goes straight to the camera; the file picker is only the fallback
+  // CameraCapture offers when the camera can't be opened.
+  const handlePhotoButtonClick = () => setCameraOpen(true);
 
-  // Just stages a local preview — nothing is sent to the server until 保存 is
-  // pressed. Only one photo per patient per day is kept, so picking a new
-  // file replaces whatever was already staged rather than adding to it.
-  const handlePhotoFilesSelected = (fileList: FileList | null) => {
-    if (!fileList || fileList.length === 0) return;
-    const file = fileList[0];
+  const handlePickFromFile = () => {
+    setCameraOpen(false);
+    photoInputRef.current?.click();
+  };
+
+  // Only one photo per patient per day is kept, so a new one replaces whatever
+  // was already staged rather than adding to it. Takes ownership of `url`.
+  const stagePhoto = (file: File, url: string) => {
     pendingIdRef.current -= 1;
-    const item = { id: pendingIdRef.current, file, url: URL.createObjectURL(file) };
+    const item = { id: pendingIdRef.current, file, url };
     setPendingPhotos((prev) => {
       prev.forEach((p) => URL.revokeObjectURL(p.url));
       return [item];
     });
+  };
+
+  // Confirmed in the camera's review step — staged as a local preview only;
+  // nothing is sent to the server until 保存 is pressed.
+  const handleCameraConfirm = (file: File) => {
+    stagePhoto(file, URL.createObjectURL(file));
+    setCameraOpen(false);
+    setStatusMsg("📷 写真を追加しました（保存でアップロード）");
+  };
+
+  const handlePhotoFilesSelected = (fileList: FileList | null) => {
+    if (!fileList || fileList.length === 0) return;
+    const file = fileList[0];
+    stagePhoto(file, URL.createObjectURL(file));
     if (photoInputRef.current) photoInputRef.current.value = "";
   };
 
@@ -604,7 +624,7 @@ export default function StatusMatcher() {
 
     if (PHOTO_UPLOAD_COMMAND.test(normalizeJa(rawFinal))) {
       handlePhotoButtonClick();
-      setStatusMsg("📷 写真選択ダイアログを開きました");
+      setStatusMsg("📷 カメラを起動しました");
       return;
     }
 
@@ -754,7 +774,8 @@ export default function StatusMatcher() {
       if (isListeningRef.current) restartRecognition();
     } catch (e) {
       console.error("save failed", e);
-      setStatusMsg("❌ 保存に失敗しました");
+      const detail = e instanceof Error ? e.message : "";
+      setStatusMsg(detail ? `❌ 保存に失敗しました（${detail}）` : "❌ 保存に失敗しました");
     } finally {
       setSavingRecord(false);
     }
@@ -843,6 +864,14 @@ export default function StatusMatcher() {
             </div>
           )}
         </div>
+      )}
+
+      {cameraOpen && (
+        <CameraCapture
+          onConfirm={handleCameraConfirm}
+          onClose={() => setCameraOpen(false)}
+          onFallbackToFile={handlePickFromFile}
+        />
       )}
 
       {lightboxIndex !== null && (
