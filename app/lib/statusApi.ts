@@ -122,7 +122,15 @@ export async function saveStatusRecord(params: {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(params),
   });
-  if (!r.ok) throw new Error("failed to save record");
+  if (!r.ok) {
+    let detail = "";
+    try {
+      detail = (await r.json())?.error || "";
+    } catch {
+      /* ignore */
+    }
+    throw new Error(detail ? `failed to save record (${r.status}): ${detail}` : `failed to save record (${r.status})`);
+  }
   return r.json();
 }
 

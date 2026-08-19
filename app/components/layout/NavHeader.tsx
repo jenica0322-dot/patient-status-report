@@ -24,7 +24,7 @@ const NavHeader: React.FC<NavHeaderProps> = ({
   reserveInstallButtonSpace,
 }) => {
   const collapsedWidth = 80;
-  const expandedWidth = 260;
+  const expandedWidth = 220;
 
   const navRef = useRef<HTMLElement>(null);
 
