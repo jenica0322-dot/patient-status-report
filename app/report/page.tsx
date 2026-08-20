@@ -415,7 +415,7 @@ export default function ReportPage() {
                       <tr key={iso}>
                         <td className={styles.colDay}>{day}</td>
                         <td className={styles.colWeekday}>{weekday}</td>
-                        <td className={styles.colHaitatsusha}></td>
+                        <td className={styles.colHaitatsusha}>{textWithComment(values.delivery_person)}</td>
                         <td className={styles.colKakuninin}>
                           {photoDateSet.has(iso) && <span className={styles.kakuninMark}>○</span>}
                         </td>
