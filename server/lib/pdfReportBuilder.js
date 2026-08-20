@@ -288,7 +288,8 @@ function buildDailyGridTable({ data, dailyFields, monthlyFields }) {
 
     setCell(row, 1, day, { fill: COLORS.GRAY, size: DAY_ROW_FONT_SIZE });
     setCell(row, 2, rawValue(values.youbi) || WEEKDAY_JA[dateObj.getDay()], { fill: COLORS.GRAY, size: DAY_ROW_FONT_SIZE });
-    setCell(row, 3, "", { fill: COLORS.GRAY, size: DAY_ROW_FONT_SIZE }); // 配食者名 — blank, filled in by hand
+    // 配食者名 — logged-in user stamped at save time (see StatusMatcher's handleSaveRecord).
+    setCell(row, 3, rawValue(values.delivery_person) || "", { fill: COLORS.GRAY, size: DAY_ROW_FONT_SIZE });
     // 利用者確認印 — ○ when a photo was uploaded for this day (写真を見る), else blank.
     setCell(row, 4, photoDates.has(iso) ? "○" : "", { fill: COLORS.GRAY, size: DAY_ROW_FONT_SIZE });
     // Every free-text cell below is noWrap + truncated to its own column width so a

@@ -179,8 +179,10 @@ async function buildReportWorkbook({ data, dailyFields, monthlyFields }) {
     weekdayCell.value = rawValue(values.youbi) || WEEKDAY_JA[dateObj.getDay()];
     styleCell(weekdayCell, { fill: GRAY, size: 9 });
 
-    // 配食者名 — blank print-only cell, filled in by hand after printing.
-    styleCell(ws.getCell(row, 3), { fill: GRAY, size: 9 });
+    // 配食者名 — logged-in user stamped at save time (see StatusMatcher's handleSaveRecord).
+    const haitatsushaCell = ws.getCell(row, 3);
+    haitatsushaCell.value = rawValue(values.delivery_person) || "";
+    styleCell(haitatsushaCell, { fill: GRAY, size: 9 });
 
     // 利用者確認印 — ○ when a photo was uploaded for this day (写真を見る), else blank.
     const kakuninCell = ws.getCell(row, 4);

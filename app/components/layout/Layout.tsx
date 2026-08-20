@@ -11,7 +11,7 @@ import { useAuth } from "@/app/context/AuthContext";
 import { usePatient } from "@/app/context/PatientContext";
 import { Download } from "react-bootstrap-icons";
 import layoutStyles from "@/app/styles/Layout.module.css";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 
 interface BeforeInstallPromptEvent extends Event {
   readonly platforms: Array<string>;
@@ -63,6 +63,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   const { selectedPatient } = usePatient();
   const isDesktop = useIsDesktop("(min-width: 768px)");
   const pathname = usePathname();
+  const router = useRouter();
 
   useEffect(() => {
     const handleBeforeInstallPrompt = (e: Event) => {
@@ -123,7 +124,8 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
 
   const handleLogout = useCallback(() => {
     logout();
-  }, [logout]);
+    router.push("/");
+  }, [logout, router]);
 
   const employeeName = user?.username || "Guest";
   const patientName = selectedPatient?.name || null;

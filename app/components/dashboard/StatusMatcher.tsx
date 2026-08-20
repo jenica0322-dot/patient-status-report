@@ -13,6 +13,7 @@ import {
   StatusPhoto,
 } from "@/app/lib/statusApi";
 import { usePatient } from "@/app/context/PatientContext";
+import { useAuth } from "@/app/context/AuthContext";
 import { JaDateInput, JaMonthInput } from "@/app/components/JaDatePicker";
 import PatientSelector from "@/app/components/dashboard/PatientSelector";
 import PhotoLightbox from "@/app/components/dashboard/PhotoLightbox";
@@ -223,6 +224,7 @@ function currentYearMonth() {
 
 export default function StatusMatcher() {
   const { selectedPatient } = usePatient();
+  const { user } = useAuth();
 
   const [screenKey, setScreenKey] = useState<string>("daily_status");
   const [recordDate, setRecordDate] = useState(todayIso());
@@ -747,9 +749,16 @@ export default function StatusMatcher() {
         ? { screen_key: screen, patient_id: patient.id, record_date: recordDateRef.current }
         : { screen_key: screen, patient_id: patient.id, record_year_month: yearMonthRef.current };
 
+    // 配食者名 (report's daily "delivery person" column) isn't a picker field —
+    // it's always the logged-in user, stamped on save.
+    const payloadValues =
+      screen === "daily_status"
+        ? { ...valuesRef.current, delivery_person: { value: user?.username || "" } }
+        : valuesRef.current;
+
     setSavingRecord(true);
     try {
-      await saveStatusRecord({ ...baseParams, values: valuesRef.current });
+      await saveStatusRecord({ ...baseParams, values: payloadValues });
 
       // Pending previews are only actually uploaded once the record itself has saved.
       const toUpload = pendingPhotosRef.current;
@@ -946,6 +955,7 @@ export default function StatusMatcher() {
                 {/* Manual input, in addition to voice */}
                 {focusField && focusField.field_type === "checkbox" && (
                   <div
+                    key={`checkbox-${focusField.field_key}`}
                     className={`${styles.checkboxToggle} ${
                       values[focusField.field_key]?.value === true ? styles.checked : ""
                     }`}
@@ -963,7 +973,7 @@ export default function StatusMatcher() {
                 )}
 
                 {focusField && focusField.field_type === "preset" && focusField.phrases?.length > 0 && (
-                  <div className="card border-0 shadow-sm rounded-4 mt-3">
+                  <div key={`preset-${focusField.field_key}`} className="card border-0 shadow-sm rounded-4 mt-3">
                     <div className="card-body">
                       <h6 className="card-title d-flex align-items-center mb-3">
                         <span className="badge bg-primary me-2 rounded-pill">🎯</span>
@@ -994,7 +1004,7 @@ export default function StatusMatcher() {
                 )}
 
                 {focusField && focusField.field_type === "text" && (
-                  <div className="mt-3">
+                  <div key={`text-${focusField.field_key}`} className="mt-3">
                     <label className="form-label fw-semibold text-muted text-uppercase small mb-2">
                       値（手入力）
                     </label>
@@ -1011,7 +1021,7 @@ export default function StatusMatcher() {
                 )}
 
                 {focusField && (
-                  <div className="mt-3">
+                  <div key={`comment-${focusField.field_key}`} className="mt-3">
                     <label className="form-label fw-semibold text-muted text-uppercase small mb-2">
                       コメント（自由入力）
                     </label>
