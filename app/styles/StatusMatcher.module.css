@@ -235,6 +235,19 @@
   opacity: 0;
 }
 
+.micButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+  background: var(--gradient-primary);
+  animation: none;
+  box-shadow: var(--shadow-xl);
+  transform: none;
+}
+
+.micButton:disabled::before {
+  opacity: 0;
+}
+
 .statusText {
   font-size: 1.125rem;
   font-weight: 500;

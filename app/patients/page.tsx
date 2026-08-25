@@ -77,7 +77,7 @@ export default function PatientsPage() {
         });
         setPatients((prev) => (append ? [...prev, ...data.items] : data.items));
         setPage(data.page);
-        setTotal(data.total);
+        setTotal(data.total ?? 0);
         setHasMore(data.hasMore);
       } catch (e) {
         console.error(e);

@@ -15,7 +15,11 @@ import { fetchPatients, fetchPatientAreas, Patient, PatientArea } from "@/app/li
 import { normalizeVoiceText, normalizeSpokenDigits } from "@/app/lib/voiceText";
 
 const PAGE_SIZE = 30;
-const VOICE_MATCH_MAX_PAGES = 20;
+// Voice matching fetches its own candidate pages separately from the visible list
+// (PAGE_SIZE above), using the largest page size the server allows (see parsePaging's
+// clamp to 100) so the same ~600-candidate ceiling is covered in far fewer round trips.
+const VOICE_MATCH_PAGE_SIZE = 100;
+const VOICE_MATCH_MAX_PAGES = 6;
 
 function scorePatientMatch(patient: Patient, spoken: string) {
   const normalizedSpoken = normalizeVoiceText(spoken);
@@ -192,22 +196,47 @@ export default function PatientSelector({
       const candidateMap = new Map<number, Patient>(patients.map((p) => [p.id, p]));
 
       const collectCandidates = async (q?: string) => {
-        let nextPage = 1;
-        let hasMorePages = true;
-        while (hasMorePages && nextPage <= VOICE_MATCH_MAX_PAGES) {
-          const result = await fetchPatients({
-            page: nextPage,
-            limit: PAGE_SIZE,
-            q,
-            belong_area: areaFilter || undefined,
-          });
-          for (const patient of result.items) {
-            candidateMap.set(patient.id, patient);
+        // Page 1 stays a solo round trip so the common case — an exact match right
+        // away — returns as fast as before, without paying for any of the later pages.
+        const first = await fetchPatients({
+          page: 1,
+          limit: VOICE_MATCH_PAGE_SIZE,
+          q,
+          belong_area: areaFilter || undefined,
+        });
+        for (const patient of first.items) candidateMap.set(patient.id, patient);
+        const firstScored = findBestPatientMatchWithScore(Array.from(candidateMap.values()), spoken);
+        if (firstScored && firstScored.score >= 120) return firstScored;
+
+        // Only reached when nothing matched yet (typos, poor recognition, patient
+        // not in the first page) — this used to page through sequentially, one
+        // network round trip at a time, which is what made a bad/no match take so
+        // long. Fetching the rest of the (still capped) candidate set in parallel —
+        // and skipping the redundant COUNT(*) on each, since the page count is
+        // already known from page 1 — collapses that into roughly one extra
+        // round-trip's worth of wall-clock time.
+        if (first.hasMore) {
+          const totalPages = Math.min(
+            VOICE_MATCH_MAX_PAGES,
+            Math.ceil((first.total ?? 0) / VOICE_MATCH_PAGE_SIZE)
+          );
+          const remainingPages = Array.from({ length: Math.max(0, totalPages - 1) }, (_, i) => i + 2);
+          if (remainingPages.length) {
+            const results = await Promise.all(
+              remainingPages.map((p) =>
+                fetchPatients({
+                  page: p,
+                  limit: VOICE_MATCH_PAGE_SIZE,
+                  q,
+                  belong_area: areaFilter || undefined,
+                  count: false,
+                })
+              )
+            );
+            for (const result of results) {
+              for (const patient of result.items) candidateMap.set(patient.id, patient);
+            }
           }
-          const scored = findBestPatientMatchWithScore(Array.from(candidateMap.values()), spoken);
-          if (scored && scored.score >= 120) return scored;
-          hasMorePages = result.hasMore;
-          nextPage += 1;
         }
         return findBestPatientMatchWithScore(Array.from(candidateMap.values()), spoken);
       };

@@ -21,7 +21,12 @@ function parsePaging(query) {
   const offset = (page - 1) * limit;
   const q = String(query.q || "").trim();
   const belongArea = String(query.belong_area || "").trim();
-  return { page, limit, offset, q, belongArea };
+  // Opt-in only (default keeps the exact total/hasMore every existing caller relies
+  // on) — callers that already know the total page count (e.g. a voice-match sweep
+  // fetching several known pages in parallel) can pass count=0 to skip the COUNT(*)
+  // query, which is the more expensive half of every one of those requests.
+  const skipCount = String(query.count || "") === "0";
+  return { page, limit, offset, q, belongArea, skipCount };
 }
 
 function mapCustomerRow(r) {
@@ -48,7 +53,7 @@ function mapCustomerRow(r) {
   };
 }
 
-async function fetchPatientsFromUsers({ page, limit, offset, q, belongArea }) {
+async function fetchPatientsFromUsers({ page, limit, offset, q, belongArea, skipCount }) {
   const pool = getPool("users");
   const conditions = ["c.corporation_flag = 0"];
   const params = [];
@@ -72,16 +77,8 @@ async function fetchPatientsFromUsers({ page, limit, offset, q, belongArea }) {
 
   const where = `WHERE ${conditions.join(" AND ")}`;
 
-  const countResult = await pool.query(
-    `SELECT COUNT(*)::int AS total
-     FROM public.mst_customer c
-     ${where}`,
-    params
-  );
-  const total = countResult.rows[0]?.total ?? 0;
-
   const listParams = [...params, limit, offset];
-  const result = await pool.query(
+  const listQuery = pool.query(
     `SELECT
        c.pat_id,
        c.claim_pat_id,
@@ -109,7 +106,26 @@ async function fetchPatientsFromUsers({ page, limit, offset, q, belongArea }) {
     listParams
   );
 
+  // The COUNT(*) is the more expensive half of this request (same WHERE, no LIMIT),
+  // so callers that already know how many pages exist can skip it entirely.
+  const countQuery = skipCount
+    ? null
+    : pool.query(`SELECT COUNT(*)::int AS total FROM public.mst_customer c ${where}`, params);
+
+  const [result, countResult] = await Promise.all([listQuery, countQuery]);
   const items = result.rows.map(mapCustomerRow);
+
+  if (skipCount) {
+    return {
+      items,
+      total: null,
+      page,
+      limit,
+      hasMore: items.length === limit,
+    };
+  }
+
+  const total = countResult.rows[0]?.total ?? 0;
   return {
     items,
     total,
@@ -119,7 +135,7 @@ async function fetchPatientsFromUsers({ page, limit, offset, q, belongArea }) {
   };
 }
 
-async function fetchPatientsFromPrimary({ page, limit, offset, q }) {
+async function fetchPatientsFromPrimary({ page, limit, offset, q, skipCount }) {
   const conditions = [];
   const params = [];
   if (q) {
@@ -128,21 +144,31 @@ async function fetchPatientsFromPrimary({ page, limit, offset, q }) {
   }
   const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
 
-  const countResult = await primary().query(
-    `SELECT COUNT(*)::int AS total FROM patients ${where}`,
-    params
-  );
-  const total = countResult.rows[0]?.total ?? 0;
-
   const listParams = [...params, limit, offset];
-  const result = await primary().query(
+  const listQuery = primary().query(
     `SELECT id, name, created_at FROM patients
      ${where}
      ORDER BY name
      LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
     listParams
   );
+  const countQuery = skipCount
+    ? null
+    : primary().query(`SELECT COUNT(*)::int AS total FROM patients ${where}`, params);
 
+  const [result, countResult] = await Promise.all([listQuery, countQuery]);
+
+  if (skipCount) {
+    return {
+      items: result.rows,
+      total: null,
+      page,
+      limit,
+      hasMore: result.rows.length === limit,
+    };
+  }
+
+  const total = countResult.rows[0]?.total ?? 0;
   return {
     items: result.rows,
     total,
