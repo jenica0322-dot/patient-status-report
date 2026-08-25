@@ -1,7 +1,7 @@
 // app/components/dashboard/StatusMatcher.tsx
 "use client";
 
-import { useState, useRef, useEffect, useMemo } from "react";
+import { useState, useRef, useEffect, useMemo, Fragment } from "react";
 import { MicFill, StopFill, CheckCircleFill, Circle, ChevronDown, CameraFill, Trash } from "react-bootstrap-icons";
 import { Spinner } from "react-bootstrap";
 import styles from "@/app/styles/StatusMatcher.module.css";
@@ -242,6 +242,10 @@ export default function StatusMatcher() {
   const [manualText, setManualText] = useState("");
   const [patientVoiceText, setPatientVoiceText] = useState("");
   const [patientVoiceRequestId, setPatientVoiceRequestId] = useState(0);
+  // Covers both the Target Field voice match (synchronous) and the Target
+  // Users voice search (async, resolved via PatientSelector's onExternalVoiceResult) —
+  // the mic stays disabled for the duration of whichever is in flight.
+  const [isSearching, setIsSearching] = useState(false);
   const [fieldMenuOpen, setFieldMenuOpen] = useState(false);
   // Selected but not yet uploaded — local object URLs only, discarded unless 保存 is pressed.
   const [pendingPhotos, setPendingPhotos] = useState<{ id: number; file: File; url: string }[]>([]);
@@ -528,7 +532,7 @@ export default function StatusMatcher() {
   };
 
   const handleStartListening = async () => {
-    if (isListeningRef.current) return;
+    if (isListeningRef.current || isSearching) return;
     if (!(await canRecordMic())) return;
 
     setTranscript("");
@@ -652,11 +656,13 @@ export default function StatusMatcher() {
     // (which would otherwise swallow every utterance as a patient search).
     const matchedField = bestFieldMatch(rawFinal, fields);
     if (matchedField && matchedField.field_key !== focusKeyRef.current) {
+      setIsSearching(true);
       setFocusKey(matchedField.field_key);
       focusKeyRef.current = matchedField.field_key;
       setStatusMsg(`➡ ${matchedField.field_label} に切り替えました`);
       setMatchStatus("none");
       setMatches([]);
+      setIsSearching(false);
       return;
     }
 
@@ -676,6 +682,7 @@ export default function StatusMatcher() {
       }
       // Only the "利用者選択" field wires the matched patient back into its own value.
       patientFieldVoiceKeyRef.current = isPatientSelectFieldFocused ? focusKeyRef.current : null;
+      setIsSearching(true);
       setPatientVoiceText(patientText);
       setPatientVoiceRequestId((id) => id + 1);
       setStatusMsg(`利用者検索: ${patientText}`);
@@ -899,6 +906,7 @@ export default function StatusMatcher() {
           externalVoiceRequestId={patientVoiceRequestId}
           locked={!isPatientSelectField}
           onExternalVoiceResult={({ matched, message, patient }) => {
+            setIsSearching(false);
             setStatusMsg(matched ? `✅ ${message}` : `❌ ${message}`);
             const fieldKey = patientFieldVoiceKeyRef.current;
             if (fieldKey) {
@@ -946,31 +954,30 @@ export default function StatusMatcher() {
             </div>
 
             {!isPatientSelectField && (
-              <>
-                <label style={{ marginTop: 10 }}>現在の値</label>
-                <p>
-                  {focusKey ? JSON.stringify(values[focusKey]?.value ?? "", null, 0) : "---"}
-                </p>
+              <Fragment key={focusKey ?? "none"}>
+                {focusField?.field_type !== "checkbox" && (
+                  <Fragment key="raw-value">
+                    <label style={{ marginTop: 10 }}>現在の値</label>
+                    <p>
+                      {focusKey ? JSON.stringify(values[focusKey]?.value ?? "", null, 0) : "---"}
+                    </p>
+                  </Fragment>
+                )}
 
                 {/* Manual input, in addition to voice */}
-                {focusField && focusField.field_type === "checkbox" && (
-                  <div
-                    key={`checkbox-${focusField.field_key}`}
-                    className={`${styles.checkboxToggle} ${
-                      values[focusField.field_key]?.value === true ? styles.checked : ""
-                    }`}
-                    onClick={() =>
-                      setFieldValue(focusField.field_key, !(values[focusField.field_key]?.value === true))
-                    }
-                  >
-                    {values[focusField.field_key]?.value === true ? (
-                      <CheckCircleFill />
-                    ) : (
-                      <Circle />
-                    )}
-                    {values[focusField.field_key]?.value === true ? "チェック済み" : "未チェック（クリックでチェック）"}
-                  </div>
-                )}
+                {focusField && focusField.field_type === "checkbox" && (() => {
+                  const isChecked = values[focusField.field_key]?.value === true;
+                  return (
+                    <div
+                      key={`checkbox-${focusField.field_key}-${isChecked}`}
+                      className={`${styles.checkboxToggle} ${isChecked ? styles.checked : ""}`}
+                      onClick={() => setFieldValue(focusField.field_key, !isChecked)}
+                    >
+                      {isChecked ? <CheckCircleFill /> : <Circle />}
+                      {isChecked ? "チェック済み" : "未チェック（クリックでチェック）"}
+                    </div>
+                  );
+                })()}
 
                 {focusField && focusField.field_type === "preset" && focusField.phrases?.length > 0 && (
                   <div key={`preset-${focusField.field_key}`} className="card border-0 shadow-sm rounded-4 mt-3">
@@ -1040,7 +1047,7 @@ export default function StatusMatcher() {
                     />
                   </div>
                 )}
-              </>
+              </Fragment>
             )}
           </div>
         )}
@@ -1070,11 +1077,16 @@ export default function StatusMatcher() {
           className={`${styles.micButton} ${isListening ? styles.isListening : ""}`}
           onClick={isListening ? handleStopListening : handleStartListening}
           aria-label={isListening ? "リスニング停止" : "リスニング開始"}
+          disabled={isSearching}
         >
           {isListening ? <StopFill size={32} /> : <MicFill size={32} />}
         </button>
         <p className={styles.statusText}>
-          {isListening ? "リスニング中…（連続で話してOK。「保存」で終了）" : "マイクボタンで開始、または手入力してください"}
+          {isSearching
+            ? "検索中…"
+            : isListening
+            ? "リスニング中…（連続で話してOK。「保存」で終了）"
+            : "マイクボタンで開始、または手入力してください"}
         </p>
       </div>
 

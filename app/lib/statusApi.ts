@@ -32,7 +32,8 @@ export interface PatientArea {
 
 export interface PatientsPage {
   items: Patient[];
-  total: number;
+  // null when the request opted out of the COUNT(*) query via `count: false`.
+  total: number | null;
   page: number;
   limit: number;
   hasMore: boolean;
@@ -43,6 +44,11 @@ export type FetchPatientsParams = {
   limit?: number;
   q?: string;
   belong_area?: string;
+  // Skips the server's COUNT(*) query — `total` comes back null and `hasMore` becomes
+  // an approximation (items.length === limit). Only safe when the caller doesn't need
+  // an exact total/hasMore for this particular page (e.g. it already knows the page
+  // count from an earlier request and is just fetching known pages in parallel).
+  count?: false;
 };
 
 // ===== Patients (read-only from mst_customer when PATIENTS_DB_SOURCE=users) =====
@@ -52,6 +58,7 @@ export async function fetchPatients(params: FetchPatientsParams = {}): Promise<P
   if (params.limit != null) search.set("limit", String(params.limit));
   if (params.q) search.set("q", params.q);
   if (params.belong_area) search.set("belong_area", params.belong_area);
+  if (params.count === false) search.set("count", "0");
   const qs = search.toString();
   const r = await fetch(`${API_BASE}/api/patients${qs ? `?${qs}` : ""}`, {
     cache: "no-store",
