@@ -1,4 +1,5 @@
 require("dotenv").config();
+const https = require("https");
 const express = require("express");
 const next = require("next");
 const bodyParser = require("body-parser");
@@ -8,7 +9,7 @@ const port = isDev ? 3099 : process.env.PORT || 3003;
 const app = next({ dev: isDev });
 const handle = app.getRequestHandler();
 
-app.prepare().then(() => {
+app.prepare().then(async () => {
   const server = express();
 
   server.use(bodyParser.json());
@@ -22,9 +23,27 @@ app.prepare().then(() => {
     return handle(req, res);
   });
 
-  const httpServer = server.listen(port, (err) => {
+  // Dev runs over HTTPS (self-signed) rather than plain HTTP: getUserMedia
+  // (camera for QR/photo capture, mic for voice input) only works in a secure
+  // context, and a phone hitting the dev machine's LAN IP is never treated as
+  // one over http://. Production keeps plain HTTP — TLS there is terminated
+  // by whatever's in front of it.
+  const { ensureDevCert, getLocalNetworkIPs } = isDev ? require("./lib/devHttps") : {};
+  const httpServer = isDev
+    ? https.createServer(await ensureDevCert(), server)
+    : server;
+
+  // 0.0.0.0 makes the server reachable from other devices on the same Wi-Fi
+  // (a phone), not just from this machine.
+  httpServer.listen(port, "0.0.0.0", (err) => {
     if (err) throw err;
-    console.log(`> Server running on http://localhost:${port}`);
+    const protocol = isDev ? "https" : "http";
+    console.log(`> Server running on ${protocol}://localhost:${port}`);
+    if (isDev) {
+      for (const ip of getLocalNetworkIPs()) {
+        console.log(`> On your phone (same Wi-Fi): ${protocol}://${ip}:${port}`);
+      }
+    }
   });
 
   // Forward WebSocket upgrade requests (Turbopack/webpack HMR) to Next's dev server.

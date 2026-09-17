@@ -22,6 +22,9 @@
 .DS_Store
 *.pem
 
+# self-signed dev HTTPS cert (regenerated per-machine, see server/lib/devHttps.js)
+/server/certs/
+
 # debug
 npm-debug.log*
 yarn-debug.log*
