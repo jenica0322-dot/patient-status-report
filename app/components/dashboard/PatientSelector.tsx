@@ -299,7 +299,7 @@ export default function PatientSelector({
         disabled={locked}
         title={locked ? "対象フィールドを「利用者選択」にすると変更できます" : undefined}
       >
-        <PersonCircle size={18} />
+        <PersonCircle size={15} />
         <span className={styles.triggerText}>
           {selectedPatient ? selectedPatient.name : "利用者を選択してください"}
         </span>

@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useMemo, Fragment } from "react";
-import { MicFill, StopFill, CheckCircleFill, Circle, ChevronDown, CameraFill, Trash } from "react-bootstrap-icons";
+import { MicFill, StopFill, CheckCircleFill, Circle, ChevronDown, CameraFill, QrCodeScan, Trash } from "react-bootstrap-icons";
 import { Spinner } from "react-bootstrap";
 import styles from "@/app/styles/StatusMatcher.module.css";
 import {
@@ -18,7 +18,9 @@ import { JaDateInput, JaMonthInput } from "@/app/components/JaDatePicker";
 import PatientSelector from "@/app/components/dashboard/PatientSelector";
 import PhotoLightbox from "@/app/components/dashboard/PhotoLightbox";
 import CameraCapture from "@/app/components/dashboard/CameraCapture";
+import QRScanner from "@/app/components/dashboard/QRScanner";
 import { normalizeSpokenDigits } from "@/app/lib/voiceText";
+import { findPatientByTargetUserId, parseTargetUserId } from "@/app/lib/qrTargetUser";
 
 declare global {
   interface Window {
@@ -223,7 +225,7 @@ function currentYearMonth() {
 }
 
 export default function StatusMatcher() {
-  const { selectedPatient } = usePatient();
+  const { selectedPatient, selectPatient } = usePatient();
   const { user } = useAuth();
 
   const [screenKey, setScreenKey] = useState<string>("daily_status");
@@ -252,6 +254,7 @@ export default function StatusMatcher() {
   const [savingRecord, setSavingRecord] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [cameraOpen, setCameraOpen] = useState(false);
+  const [qrOpen, setQrOpen] = useState(false);
 
   const fieldMenuRef = useRef<HTMLDivElement | null>(null);
   const photoInputRef = useRef<HTMLInputElement | null>(null);
@@ -363,6 +366,32 @@ export default function StatusMatcher() {
   // 写真追加 goes straight to the camera; the file picker is only the fallback
   // CameraCapture offers when the camera can't be opened.
   const handlePhotoButtonClick = () => setCameraOpen(true);
+
+  // Scans a Target User QR code, reads the Target User ID off it, and selects
+  // that patient the same way a voice/manual pick does.
+  const handleQrScan = async (raw: string) => {
+    setQrOpen(false);
+    const targetUserId = parseTargetUserId(raw);
+    if (!targetUserId) {
+      setStatusMsg("❌ QRコードから利用者IDを読み取れませんでした");
+      return;
+    }
+    setIsSearching(true);
+    try {
+      const patient = await findPatientByTargetUserId(targetUserId);
+      if (patient) {
+        selectPatient(patient);
+        setStatusMsg(`✅ ${patient.name} を選択しました`);
+      } else {
+        setStatusMsg(`❌ ID ${targetUserId} の利用者が見つかりませんでした`);
+      }
+    } catch (e) {
+      console.error("QR patient lookup failed", e);
+      setStatusMsg("❌ 利用者の検索に失敗しました");
+    } finally {
+      setIsSearching(false);
+    }
+  };
 
   const handlePickFromFile = () => {
     setCameraOpen(false);
@@ -844,6 +873,15 @@ export default function StatusMatcher() {
             />
             <button
               type="button"
+              className={`btn btn-sm btn-outline-primary ${styles.photoUploadBtn}`}
+              onClick={() => setQrOpen(true)}
+              disabled={isSearching}
+            >
+              <QrCodeScan size={14} />
+              <span>QR読取</span>
+            </button>
+            <button
+              type="button"
               className="btn btn-sm btn-success ms-auto"
               onClick={handleSaveRecord}
               disabled={savingRecord}
@@ -890,6 +928,8 @@ export default function StatusMatcher() {
         />
       )}
 
+      {qrOpen && <QRScanner onScan={handleQrScan} onClose={() => setQrOpen(false)} />}
+
       {lightboxIndex !== null && (
         <PhotoLightbox
           photos={pendingDisplay}
@@ -917,11 +957,11 @@ export default function StatusMatcher() {
         />
 
         {!selectedPatient ? (
-          <p style={{ textAlign: "center", color: "var(--secondary-text)", marginTop: "1.25rem", marginBottom: 0 }}>
+          <p style={{ textAlign: "center", color: "var(--secondary-text)", fontSize: "var(--text-fs)", marginTop: "0.5rem", marginBottom: 0 }}>
             マイクで利用者名・ふりがな・pat_id を話すか、上のリストから選択してください。
           </p>
         ) : (
-          <div style={{ marginTop: "1.5rem" }}>
+          <div style={{ marginTop: "0.5rem" }}>
             <label>対象フィールド</label>
             <div className={styles.fieldDropdown} ref={fieldMenuRef}>
               <button
@@ -957,7 +997,7 @@ export default function StatusMatcher() {
               <Fragment key={focusKey ?? "none"}>
                 {focusField?.field_type !== "checkbox" && (
                   <Fragment key="raw-value">
-                    <label style={{ marginTop: 10 }}>現在の値</label>
+                    <label style={{ marginTop: 4 }}>現在の値</label>
                     <p>
                       {focusKey ? JSON.stringify(values[focusKey]?.value ?? "", null, 0) : "---"}
                     </p>
@@ -980,9 +1020,9 @@ export default function StatusMatcher() {
                 })()}
 
                 {focusField && focusField.field_type === "preset" && focusField.phrases?.length > 0 && (
-                  <div key={`preset-${focusField.field_key}`} className="card border-0 shadow-sm rounded-4 mt-3">
+                  <div key={`preset-${focusField.field_key}`} className="card border-0 shadow-sm rounded-4 mt-1">
                     <div className="card-body">
-                      <h6 className="card-title d-flex align-items-center mb-3">
+                      <h6 className="card-title d-flex align-items-center mb-1">
                         <span className="badge bg-primary me-2 rounded-pill">🎯</span>
                         {focusField.field_label} の候補（クリックで選択、{focusField.phrases.length}件）
                       </h6>
@@ -993,11 +1033,11 @@ export default function StatusMatcher() {
                             <button
                               key={p}
                               type="button"
-                              className="list-group-item list-group-item-action border-0 px-0 py-2 d-flex align-items-center bg-transparent"
+                              className="list-group-item list-group-item-action border-0 px-0 py-0 d-flex align-items-center bg-transparent"
                               onClick={() => setFieldValue(focusField.field_key, p)}
                             >
                               <span
-                                className={`badge ${isSelected ? "bg-success" : "bg-light text-dark"} me-3 rounded-pill`}
+                                className={`badge ${isSelected ? "bg-success" : "bg-light text-dark"} me-2 rounded-pill`}
                               >
                                 {isSelected ? "✅" : "・"}
                               </span>
@@ -1011,13 +1051,13 @@ export default function StatusMatcher() {
                 )}
 
                 {focusField && focusField.field_type === "text" && (
-                  <div key={`text-${focusField.field_key}`} className="mt-3">
-                    <label className="form-label fw-semibold text-muted text-uppercase small mb-2">
+                  <div key={`text-${focusField.field_key}`} className="mt-1">
+                    <label className="form-label fw-semibold text-muted text-uppercase small mb-1">
                       値（手入力）
                     </label>
                     <textarea
                       className="form-control border-0 shadow-sm rounded-3"
-                      rows={2}
+                      rows={1}
                       value={manualText}
                       onChange={(e) => {
                         setManualText(e.target.value);
@@ -1028,13 +1068,13 @@ export default function StatusMatcher() {
                 )}
 
                 {focusField && (
-                  <div key={`comment-${focusField.field_key}`} className="mt-3">
-                    <label className="form-label fw-semibold text-muted text-uppercase small mb-2">
+                  <div key={`comment-${focusField.field_key}`} className="mt-1">
+                    <label className="form-label fw-semibold text-muted text-uppercase small mb-1">
                       コメント（自由入力）
                     </label>
                     <textarea
                       className="form-control border-0 shadow-sm rounded-3"
-                      rows={2}
+                      rows={1}
                       placeholder="ここに意見や補足を入力できます（または「コメント〜」と話してください）"
                       value={values[focusField.field_key]?.comment ?? ""}
                       onChange={(e) => {
@@ -1079,7 +1119,7 @@ export default function StatusMatcher() {
           aria-label={isListening ? "リスニング停止" : "リスニング開始"}
           disabled={isSearching}
         >
-          {isListening ? <StopFill size={32} /> : <MicFill size={32} />}
+          {isListening ? <StopFill size={22} /> : <MicFill size={22} />}
         </button>
         <p className={styles.statusText}>
           {isSearching
@@ -1104,8 +1144,8 @@ export default function StatusMatcher() {
       {spokenLog.length > 0 && (
         <div className="card border-0 shadow-sm rounded-4">
           <div className="card-body text-center">
-            <h6 className="mb-2">🗣 最新の発話</h6>
-            <code className="bg-light px-3 py-2 rounded fw-medium fs-6">{spokenLog[0].text}</code>
+            <h6 className="mb-1" style={{ fontSize: "var(--label-fs)" }}>🗣 最新の発話</h6>
+            <code className="bg-light px-2 py-1 rounded fw-medium" style={{ fontSize: "var(--text-fs)" }}>{spokenLog[0].text}</code>
           </div>
         </div>
       )}
@@ -1113,9 +1153,9 @@ export default function StatusMatcher() {
       {selectedPatient && (
         <div className="card border-0 shadow-sm rounded-4">
           <div className="card-body">
-            <h5 className="card-title mb-3">📋 現在の入力内容（保存対象）</h5>
+            <h5 className="card-title mb-1">📋 現在の入力内容（保存対象）</h5>
             {Object.keys(values).length === 0 ? (
-              <div className="text-center text-muted py-4">データがありません</div>
+              <div className="text-center text-muted py-1">データがありません</div>
             ) : (
               <div className="list-group list-group-flush">
                 {fields
@@ -1123,8 +1163,8 @@ export default function StatusMatcher() {
                   .map((f) => {
                     const data = values[f.field_key];
                     return (
-                      <div key={f.field_key} className="list-group-item border-0 px-0 py-2">
-                        <span className="badge bg-light text-dark me-2 rounded-pill fw-bold">
+                      <div key={f.field_key} className="list-group-item border-0 px-0 py-0">
+                        <span className={`badge bg-light text-dark me-2 rounded-pill fw-bold ${styles.fieldBadge}`}>
                           {f.field_label}
                         </span>
                         {data.value !== undefined && (
