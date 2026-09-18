@@ -48,7 +48,7 @@ export default function LoginForm() {
         <h3 className={styles.title}>ログイン</h3>
         <p className={styles.subtitle}>状況記録表兼報告書へようこそ</p>
 
-        <Form onSubmit={handleSubmit}>
+        <Form onSubmit={handleSubmit} suppressHydrationWarning>
           {error && (
             <Alert variant="danger" className="py-2">
               {error}
@@ -67,6 +67,7 @@ export default function LoginForm() {
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 required
+                suppressHydrationWarning
               />
             </InputGroup>
           </Form.Group>
@@ -83,6 +84,7 @@ export default function LoginForm() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
+                suppressHydrationWarning
               />
               <Button
                 variant="outline-secondary"

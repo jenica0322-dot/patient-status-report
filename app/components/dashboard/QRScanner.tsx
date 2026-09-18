@@ -15,6 +15,12 @@ type QRScannerProps = {
   onClose: () => void;
 };
 
+// A code must decode to the same value on every frame for this long, with no
+// gaps, before it's accepted — filters out the momentary/garbled reads a QR
+// code produces while it's still coming into focus or is still moving into
+// the frame, so only a clearly-focused, stationary code triggers a scan.
+const STABILITY_MS = 700;
+
 function errorMessage(e: unknown): string {
   const name = (e as { name?: string })?.name;
   if (name === "NotAllowedError" || name === "SecurityError")
@@ -32,6 +38,11 @@ export default function QRScanner({ onScan, onClose }: QRScannerProps) {
   const streamRef = useRef<MediaStream | null>(null);
   const rafRef = useRef<number | null>(null);
   const scannedRef = useRef(false);
+  // Tracks the QR value currently being held steady, and when that streak
+  // started — reset the moment a frame decodes something different or
+  // nothing at all, so only an uninterrupted read counts toward the delay.
+  const stableDataRef = useRef<string | null>(null);
+  const stableSinceRef = useRef<number>(0);
 
   const [starting, setStarting] = useState(true);
   const [error, setError] = useState("");
@@ -57,11 +68,21 @@ export default function QRScanner({ onScan, onClose }: QRScannerProps) {
         const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
         const code = jsQR(imageData.data, imageData.width, imageData.height);
         if (code?.data) {
-          scannedRef.current = true;
-          stopStream();
-          onScan(code.data);
-          return;
+          const now = performance.now();
+          if (stableDataRef.current !== code.data) {
+            stableDataRef.current = code.data;
+            stableSinceRef.current = now;
+          } else if (now - stableSinceRef.current >= STABILITY_MS) {
+            scannedRef.current = true;
+            stopStream();
+            onScan(code.data);
+            return;
+          }
+        } else {
+          stableDataRef.current = null;
         }
+      } else {
+        stableDataRef.current = null;
       }
     }
     rafRef.current = requestAnimationFrame(tick);
