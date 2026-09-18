@@ -41,7 +41,6 @@ type Field = {
 };
 
 type Match = { option: string; percentage: number };
-type SpokenItem = { text: string; at: number };
 
 const SCREENS: { key: string; label: string }[] = [
   { key: "daily_status", label: "日次記録" },
@@ -240,7 +239,6 @@ export default function StatusMatcher() {
   const [statusMsg, setStatusMsg] = useState("");
   const [matchStatus, setMatchStatus] = useState<"none" | "match" | "no-match">("none");
   const [matches, setMatches] = useState<Match[]>([]);
-  const [spokenLog, setSpokenLog] = useState<SpokenItem[]>([]);
   const [manualText, setManualText] = useState("");
   const [patientVoiceText, setPatientVoiceText] = useState("");
   const [patientVoiceRequestId, setPatientVoiceRequestId] = useState(0);
@@ -481,10 +479,6 @@ export default function StatusMatcher() {
     };
   }, []);
 
-  const logUtter = (text: string) => {
-    setSpokenLog([{ text, at: Date.now() }]);
-  };
-
   // Builds a fresh recognition instance rather than reusing one that just ended —
   // some browsers throw InvalidStateError when start() is called again on the same
   // instance too soon after onend, which used to silently kill voice input for good
@@ -644,8 +638,6 @@ export default function StatusMatcher() {
     if (!text) return;
     const rawFinal = text.trim();
     if (!rawFinal) return;
-
-    logUtter(rawFinal);
 
     if (rawFinal === lastFinalRef.current) return;
     lastFinalRef.current = rawFinal;
@@ -1141,50 +1133,6 @@ export default function StatusMatcher() {
         </div>
       )}
 
-      {spokenLog.length > 0 && (
-        <div className="card border-0 shadow-sm rounded-4">
-          <div className="card-body text-center">
-            <h6 className="mb-1" style={{ fontSize: "var(--label-fs)" }}>🗣 最新の発話</h6>
-            <code className="bg-light px-2 py-1 rounded fw-medium" style={{ fontSize: "var(--text-fs)" }}>{spokenLog[0].text}</code>
-          </div>
-        </div>
-      )}
-
-      {selectedPatient && (
-        <div className="card border-0 shadow-sm rounded-4">
-          <div className="card-body">
-            <h5 className="card-title mb-1">📋 現在の入力内容（保存対象）</h5>
-            {Object.keys(values).length === 0 ? (
-              <div className="text-center text-muted py-1">データがありません</div>
-            ) : (
-              <div className="list-group list-group-flush">
-                {fields
-                  .filter((f) => values[f.field_key] !== undefined)
-                  .map((f) => {
-                    const data = values[f.field_key];
-                    return (
-                      <div key={f.field_key} className="list-group-item border-0 px-0 py-0">
-                        <span className={`badge bg-light text-dark me-2 rounded-pill fw-bold ${styles.fieldBadge}`}>
-                          {f.field_label}
-                        </span>
-                        {data.value !== undefined && (
-                          <small className="text-muted">
-                            値: <code className="bg-light px-2 py-1 rounded">{JSON.stringify(data.value)}</code>
-                          </small>
-                        )}
-                        {data.comment && (
-                          <small className="text-muted ms-2">
-                            コメント: <span className="fst-italic">{data.comment}</span>
-                          </small>
-                        )}
-                      </div>
-                    );
-                  })}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
