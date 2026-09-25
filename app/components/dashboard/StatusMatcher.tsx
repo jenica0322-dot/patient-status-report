@@ -134,10 +134,62 @@ function bestFieldMatch(utterance: string, fields: Field[]): Field | null {
 
 const AFFIRMATIVE = /^(よし|した|できた|チェック|レ|まる|○|✓|ok|オーケー)$/;
 const NEGATIVE = /^(なし|しない|できていない|ばつ|×|no)$/;
+
+// Spellings the recognizer commonly produces for a clearly spoken 「よし」/「なし」
+// (kanji, katakana, stretched vowels) — folded back to the hiragana form the
+// answer regexes expect.
+const YOSHI_VARIANTS = /^(良し|善し|好し|吉|止し|よーし|よしっ|よっし)$/;
+const NASHI_VARIANTS = /^(無し|梨|無|なーし|なしっ)$/;
+
+// Normalizes a short spoken answer before testing it against AFFIRMATIVE /
+// NEGATIVE / CONFIRM_SAVE_*: drops trailing punctuation the recognizer
+// appends ("よし。" → "よし."), and folds katakana ("ヨシ") and the common
+// kanji/stretched variants above into よし/なし. Anything else is returned
+// with its katakana intact, since "チェック"/"オーケー" are matched as-is.
+function normalizeAnswer(t: string): string {
+  const cleaned = normalizeJa(t).replace(/[.!！?？、…]+$/g, "");
+  const hira = cleaned.replace(/[ァ-ヶ]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0x60));
+  if (hira === "よし" || YOSHI_VARIANTS.test(hira)) return "よし";
+  if (hira === "なし" || NASHI_VARIANTS.test(hira)) return "なし";
+  return cleaned;
+}
+
+// True for an utterance that is unambiguously a checkbox yes/no answer.
+function isCheckboxAnswer(t: string): boolean {
+  const a = normalizeAnswer(t);
+  return AFFIRMATIVE.test(a) || NEGATIVE.test(a);
+}
 // "写真アップロード" covers the recognizer dropping the を particle; "写真追加"
 // matches the visible button label so saying what's on screen also works.
 const PHOTO_UPLOAD_COMMAND = /^(写真を?アップロード|アップロード写真|写真追加|uploadphoto|photoupload)$/;
 const PATIENT_SELECT_FIELD_LABEL = "利用者選択";
+
+// Answers to the sequential flow's final "保存しますか？" confirmation. Distinct
+// from AFFIRMATIVE/NEGATIVE above (those are per-field "did this happen"
+// checkbox answers) — this is a plain yes/no to a yes/no question, so it
+// accepts the words people actually say to that ("はい"/"いいえ") too.
+const CONFIRM_SAVE_YES = /^(はい|うん|お願いします|する|よし|オーケー|ok|保存|ほぞん|save)$/;
+const CONFIRM_SAVE_NO = /^(いいえ|いや|しない|やめる|キャンセル|no)$/;
+
+// Field groups where the fields represent mutually exclusive states of one
+// underlying question (e.g. a meal was 完食/半分/残し — finished, half-eaten,
+// or leftover — never more than one of those at once). Once any field in a
+// group has been answered "true", the sequential auto-flow skips straight
+// past the rest of the group instead of asking about states that no longer
+// apply.
+const MUTUALLY_EXCLUSIVE_FIELD_GROUPS: string[][] = [
+  ["kanshoku", "hanbun", "nokoshi"], // 完食 / 半分 / 残し
+];
+
+function shouldSkipInAutoFlow(field: Field, values: Record<string, { value?: any; comment?: string }>) {
+  // 利用者選択 exists so a patient can be picked as one of the Target Fields,
+  // but the auto-flow only ever starts after a patient is already selected
+  // (by QR, voice, or manual pick), so asking it again makes no sense here.
+  if (field.field_label === PATIENT_SELECT_FIELD_LABEL) return true;
+  const group = MUTUALLY_EXCLUSIVE_FIELD_GROUPS.find((g) => g.includes(field.field_key));
+  if (!group) return false;
+  return group.some((key) => key !== field.field_key && values[key]?.value === true);
+}
 
 function pad2(n: number) {
   return String(n).padStart(2, "0");
@@ -253,6 +305,8 @@ export default function StatusMatcher() {
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [qrOpen, setQrOpen] = useState(false);
+  // Drives the "保存しますか？" yes/no UI at the end of the sequential auto-flow.
+  const [awaitingSaveConfirm, setAwaitingSaveConfirm] = useState(false);
 
   const fieldMenuRef = useRef<HTMLDivElement | null>(null);
   const photoInputRef = useRef<HTMLInputElement | null>(null);
@@ -277,6 +331,20 @@ export default function StatusMatcher() {
   const selectedPatientRef = useRef(selectedPatient);
   const recordDateRef = useRef(recordDate);
   const yearMonthRef = useRef(yearMonth);
+  // Sequential auto-flow phase: "off" (manual, existing behavior) | "field"
+  // (auto-asking Target Fields in order) | "confirm-save" (asking the final
+  // 保存しますか？ yes/no). A ref because handleFinalTranscript's long-lived
+  // recognition closure needs the current value, not the one at mount.
+  const flowPhaseRef = useRef<"off" | "field" | "confirm-save">("off");
+  // Skips starting the auto-flow for a patient already selected when this
+  // screen mounts/reloads (e.g. restored from localStorage) — it should only
+  // kick in the moment a patient is newly selected during this session.
+  const patientFlowMountedRef = useRef(false);
+  // How the next patient selection is being made. Set just before a QR scan
+  // or voice search selects a patient; anything else (picking from the list
+  // by hand) leaves it null. Only QR/voice selections start the auto-flow —
+  // a manual pick leaves Target Field choice to the user (tap or voice).
+  const patientSelectSourceRef = useRef<"qr" | "voice" | null>(null);
 
   useEffect(() => {
     focusKeyRef.current = focusKey;
@@ -348,6 +416,32 @@ export default function StatusMatcher() {
     setPendingPhotos([]);
   }, [selectedPatient, screenKey, recordDate, yearMonth]);
 
+  // Kicks off the sequential Target Field auto-flow the moment a patient is
+  // newly selected by QR scan or voice search — but not for a manual pick
+  // from the list, nor for a patient already selected when this screen first
+  // mounts/reloads.
+  useEffect(() => {
+    const source = patientSelectSourceRef.current;
+    patientSelectSourceRef.current = null;
+    if (!patientFlowMountedRef.current) {
+      patientFlowMountedRef.current = true;
+      return;
+    }
+    if (!selectedPatient) return;
+    if (source) {
+      startAutoFlow();
+    } else {
+      // Manual pick: end any auto-flow still running for the previous
+      // patient, so its questions don't carry on for this one. The mic is
+      // left as it is, so Target Fields can be chosen by voice or by tap.
+      const wasActive = flowPhaseRef.current !== "off";
+      flowPhaseRef.current = "off";
+      setAwaitingSaveConfirm(false);
+      if (wasActive && typeof window !== "undefined") window.speechSynthesis?.cancel();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedPatient?.id]);
+
   // The strip here is a staging area only — once 保存 uploads them they're
   // dropped from view immediately after. 対象フィールド has no photo history of
   // its own; 報告書's 写真を見る is the only place saved photos are browsed.
@@ -378,6 +472,9 @@ export default function StatusMatcher() {
     try {
       const patient = await findPatientByTargetUserId(targetUserId);
       if (patient) {
+        // Re-scanning the patient already selected doesn't change the
+        // selection, so don't leave a "qr" mark for a later manual pick.
+        if (patient.id !== selectedPatientRef.current?.id) patientSelectSourceRef.current = "qr";
         selectPatient(patient);
         setStatusMsg(`✅ ${patient.name} を選択しました`);
       } else {
@@ -489,13 +586,23 @@ export default function StatusMatcher() {
     rec.continuous = true;
     rec.interimResults = true;
     rec.lang = "ja-JP";
+    // Extra hypotheses let a short yes/no answer ("よし"/"なし") still be
+    // picked up when the recognizer's top guess is a homophone — see
+    // pickAnswerAlternative. The top guess ([0]) is unchanged.
+    rec.maxAlternatives = 5;
 
     rec.onresult = (e: any) => {
       let interim = "";
       for (let i = e.resultIndex; i < e.results.length; i++) {
         const chunk = e.results[i][0].transcript.trim();
-        if (e.results[i].isFinal) handleFinalTranscript(chunk);
-        else interim += chunk;
+        if (e.results[i].isFinal) {
+          const alternatives: string[] = [];
+          for (let j = 1; j < e.results[i].length; j++) {
+            const alt = e.results[i][j]?.transcript?.trim();
+            if (alt) alternatives.push(alt);
+          }
+          handleFinalTranscript(chunk, alternatives);
+        } else interim += chunk;
       }
       setTranscript(interim);
     };
@@ -596,6 +703,113 @@ export default function StatusMatcher() {
     setValues((v) => ({ ...v, [key]: { ...(v[key] || {}), value } }));
   };
 
+  // Speaks a prompt aloud, then resumes the mic once it's done (used for both
+  // the per-field question and the final save confirmation). Recognition is
+  // paused for the duration of the speech — otherwise it can hear the app's
+  // own TTS voice come back through the speaker and mistake it for an answer.
+  const speak = (text: string) => {
+    const resumeListening = () => {
+      if (flowPhaseRef.current !== "off") handleStartListening();
+    };
+    const synth = typeof window !== "undefined" ? window.speechSynthesis : undefined;
+    if (!synth) {
+      resumeListening();
+      return;
+    }
+    if (isListeningRef.current) stopAll();
+    synth.cancel();
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.lang = "ja-JP";
+    utter.onend = resumeListening;
+    utter.onerror = resumeListening;
+    synth.speak(utter);
+  };
+
+  // Moves the auto-flow to `field`: focuses it, resets the per-answer match
+  // state, and asks the question by voice (which also (re)starts the mic).
+  const goToField = (field: Field) => {
+    setFocusKey(field.field_key);
+    focusKeyRef.current = field.field_key;
+    // A new question expects a new answer — clear the duplicate-final guard
+    // so answering "よし" again (same as the previous field) isn't dropped.
+    lastFinalRef.current = "";
+    setMatchStatus("none");
+    setMatches([]);
+    setStatusMsg(`➡ ${field.field_label} を確認します`);
+    speak(`${field.field_label}を教えてください`);
+  };
+
+  // Asks the final "保存しますか？" once every Target Field has been answered.
+  const promptSaveConfirm = () => {
+    flowPhaseRef.current = "confirm-save";
+    lastFinalRef.current = "";
+    setAwaitingSaveConfirm(true);
+    setStatusMsg("💾 保存しますか？");
+    speak("保存しますか？");
+  };
+
+  // Called right after `fromKey` has been answered (by voice or by tapping a
+  // choice on screen) while the auto-flow is active — advances to the next
+  // not-skipped field, or asks to save if that was the last one.
+  // `valuesSnapshot` lets the caller pass the value it just set explicitly,
+  // since `values`/`valuesRef` may not have committed that update yet by the
+  // time this runs (needed so a same-tick mutually-exclusive-group skip sees
+  // the answer that was just given, not the one from before it).
+  const advanceFlow = (fromKey: string, valuesSnapshot?: Record<string, { value?: any; comment?: string }>) => {
+    if (flowPhaseRef.current !== "field") return;
+    if (focusKeyRef.current !== fromKey) return;
+    const snapshot = valuesSnapshot ?? valuesRef.current;
+    const idx = fields.findIndex((f) => f.field_key === fromKey);
+    if (idx === -1) return;
+    let next: Field | undefined;
+    for (let i = idx + 1; i < fields.length; i++) {
+      if (!shouldSkipInAutoFlow(fields[i], snapshot)) {
+        next = fields[i];
+        break;
+      }
+    }
+    if (next) {
+      goToField(next);
+    } else {
+      promptSaveConfirm();
+    }
+  };
+
+  // Ends the voice-question flow once 保存しますか？ is answered (はい or いいえ):
+  // stops the mic right away and keeps anything still in flight — pending TTS,
+  // or a trailing result from the session being stopped — from asking again
+  // or being read as a new command.
+  const endVoiceFlow = () => {
+    setAwaitingSaveConfirm(false);
+    flowPhaseRef.current = "off";
+    if (typeof window !== "undefined") window.speechSynthesis?.cancel();
+    if (recognitionRef.current) recognitionRef.current.onresult = null;
+    stopAll();
+  };
+
+  const confirmSaveYes = async () => {
+    // Stopped before saving, so handleSaveRecord's restart-on-save (for the
+    // ordinary manual "保存" command/button) sees the mic off and skips it.
+    endVoiceFlow();
+    await handleSaveRecord();
+  };
+
+  const confirmSaveNo = () => {
+    endVoiceFlow();
+    setStatusMsg("保存をキャンセルしました");
+  };
+
+  // Starts the sequential Target Field auto-flow from the first not-skipped
+  // field — called once a patient is newly selected (QR/voice/manual pick).
+  const startAutoFlow = () => {
+    if (!fields.length) return;
+    flowPhaseRef.current = "field";
+    setAwaitingSaveConfirm(false);
+    const first = fields.find((f) => !shouldSkipInAutoFlow(f, valuesRef.current));
+    if (!first) return;
+    goToField(first);
+  };
+
   const checkMatchAgainstPhrases = (text: string, phrases: string[], targetKey: string) => {
     const cleanedTranscript = normalizeJa(text);
     if (!cleanedTranscript) {
@@ -628,21 +842,72 @@ export default function StatusMatcher() {
       setMatchStatus("match");
       setFieldValue(targetKey, best.option);
       setStatusMsg(`「${best.option}」を記録しました`);
+      advanceFlow(targetKey, { ...valuesRef.current, [targetKey]: { ...(valuesRef.current[targetKey] || {}), value: best.option } });
     } else {
       setMatchStatus("no-match");
       setStatusMsg("候補に一致しませんでした");
     }
   };
 
-  const handleFinalTranscript = (text: string) => {
+  // Applies a checkbox answer ("よし"/"なし" etc.) to `field`, advancing the flow.
+  const answerCheckbox = (field: Field, rawFinal: string) => {
+    const currentKey = field.field_key;
+    const cleaned = normalizeAnswer(rawFinal);
+    if (AFFIRMATIVE.test(cleaned) || normalizeJa(rawFinal) === normalizeJa(field.field_label)) {
+      setFieldValue(currentKey, true);
+      setStatusMsg(`${field.field_label}: チェックしました`);
+      advanceFlow(currentKey, { ...valuesRef.current, [currentKey]: { ...(valuesRef.current[currentKey] || {}), value: true } });
+    } else if (NEGATIVE.test(cleaned)) {
+      setFieldValue(currentKey, false);
+      setStatusMsg(`${field.field_label}: チェックを外しました`);
+      advanceFlow(currentKey, { ...valuesRef.current, [currentKey]: { ...(valuesRef.current[currentKey] || {}), value: false } });
+    } else {
+      setStatusMsg("「よし」「なし」などで回答してください");
+    }
+  };
+
+  // When a yes/no answer is expected (a focused checkbox field, or the final
+  // 保存しますか？) and the recognizer's top guess isn't one but a lower-ranked
+  // alternative is, use that alternative. Otherwise the top guess stands.
+  const pickAnswerAlternative = (top: string, alternatives: string[]): string => {
+    if (!alternatives.length) return top;
+    let isAnswer: ((t: string) => boolean) | null = null;
+    if (flowPhaseRef.current === "confirm-save") {
+      isAnswer = (t) => {
+        const a = normalizeAnswer(t);
+        return CONFIRM_SAVE_YES.test(a) || CONFIRM_SAVE_NO.test(a);
+      };
+    } else if (fields.find((f) => f.field_key === focusKeyRef.current)?.field_type === "checkbox") {
+      isAnswer = isCheckboxAnswer;
+    }
+    if (!isAnswer || isAnswer(top)) return top;
+    return alternatives.find(isAnswer) ?? top;
+  };
+
+  const handleFinalTranscript = (text: string, alternatives: string[] = []) => {
     if (!text) return;
-    const rawFinal = text.trim();
+    const rawFinal = pickAnswerAlternative(text.trim(), alternatives);
     if (!rawFinal) return;
 
     if (rawFinal === lastFinalRef.current) return;
     lastFinalRef.current = rawFinal;
 
     const low = rawFinal.toLowerCase();
+
+    // The auto-flow's final "保存しますか？" confirmation takes priority over every
+    // other interpretation while it's pending — nothing else is reachable by
+    // voice until this yes/no is answered.
+    if (flowPhaseRef.current === "confirm-save") {
+      const cleanedConfirm = normalizeAnswer(rawFinal);
+      if (CONFIRM_SAVE_YES.test(cleanedConfirm)) {
+        confirmSaveYes();
+      } else if (CONFIRM_SAVE_NO.test(cleanedConfirm)) {
+        confirmSaveNo();
+      } else {
+        setStatusMsg("「はい」または「いいえ」でお答えください");
+      }
+      return;
+    }
 
     if (/^(保存|ほぞん|save)$/.test(low)) {
       handleSaveRecord();
@@ -652,6 +917,16 @@ export default function StatusMatcher() {
     if (PHOTO_UPLOAD_COMMAND.test(normalizeJa(rawFinal))) {
       handlePhotoButtonClick();
       setStatusMsg("📷 カメラを起動しました");
+      return;
+    }
+
+    // A clear "よし"/"なし"-style answer to a focused checkbox field is exactly
+    // that — handle it before the date/field-switch/patient checks below, which
+    // could otherwise claim it (e.g. "なし" partially matching a label like
+    // "問題なし" and switching fields instead of answering).
+    const focusedField = fields.find((f) => f.field_key === focusKeyRef.current);
+    if (focusedField?.field_type === "checkbox" && selectedPatientRef.current && isCheckboxAnswer(rawFinal)) {
+      answerCheckbox(focusedField, rawFinal);
       return;
     }
 
@@ -704,6 +979,7 @@ export default function StatusMatcher() {
       // Only the "利用者選択" field wires the matched patient back into its own value.
       patientFieldVoiceKeyRef.current = isPatientSelectFieldFocused ? focusKeyRef.current : null;
       setIsSearching(true);
+      patientSelectSourceRef.current = "voice";
       setPatientVoiceText(patientText);
       setPatientVoiceRequestId((id) => id + 1);
       setStatusMsg(`利用者検索: ${patientText}`);
@@ -726,16 +1002,7 @@ export default function StatusMatcher() {
     if (!field) return;
 
     if (field.field_type === "checkbox") {
-      const cleaned = normalizeJa(rawFinal);
-      if (AFFIRMATIVE.test(cleaned) || cleaned === normalizeJa(field.field_label)) {
-        setFieldValue(currentKey, true);
-        setStatusMsg(`${field.field_label}: チェックしました`);
-      } else if (NEGATIVE.test(cleaned)) {
-        setFieldValue(currentKey, false);
-        setStatusMsg(`${field.field_label}: チェックを外しました`);
-      } else {
-        setStatusMsg("「よし」「なし」などで回答してください");
-      }
+      answerCheckbox(field, rawFinal);
       return;
     }
 
@@ -748,6 +1015,7 @@ export default function StatusMatcher() {
       if (numeric && !Number.isNaN(Number(numeric))) {
         setFieldValue(currentKey, Number(numeric));
         setStatusMsg(`${field.field_label} に ${numeric} を入力しました`);
+        advanceFlow(currentKey, { ...valuesRef.current, [currentKey]: { ...(valuesRef.current[currentKey] || {}), value: Number(numeric) } });
       } else {
         setStatusMsg("数字で回答してください");
       }
@@ -760,6 +1028,7 @@ export default function StatusMatcher() {
       } else {
         setFieldValue(currentKey, rawFinal);
         setStatusMsg(`${field.field_label} に入力しました`);
+        advanceFlow(currentKey, { ...valuesRef.current, [currentKey]: { ...(valuesRef.current[currentKey] || {}), value: rawFinal } });
       }
       return;
     }
@@ -939,6 +1208,11 @@ export default function StatusMatcher() {
           locked={!isPatientSelectField}
           onExternalVoiceResult={({ matched, message, patient }) => {
             setIsSearching(false);
+            // A voice search that found no one mustn't leave its "voice"
+            // mark behind for a later manual pick to inherit.
+            // Same for one that matched the patient already selected (the
+            // selection doesn't change, so the effect that consumes it won't run).
+            if (!matched || patient?.id === selectedPatientRef.current?.id) patientSelectSourceRef.current = null;
             setStatusMsg(matched ? `✅ ${message}` : `❌ ${message}`);
             const fieldKey = patientFieldVoiceKeyRef.current;
             if (fieldKey) {
@@ -1003,7 +1277,12 @@ export default function StatusMatcher() {
                     <div
                       key={`checkbox-${focusField.field_key}-${isChecked}`}
                       className={`${styles.checkboxToggle} ${isChecked ? styles.checked : ""}`}
-                      onClick={() => setFieldValue(focusField.field_key, !isChecked)}
+                      onClick={() => {
+                        const newValue = !isChecked;
+                        const key = focusField.field_key;
+                        setFieldValue(key, newValue);
+                        advanceFlow(key, { ...valuesRef.current, [key]: { ...(valuesRef.current[key] || {}), value: newValue } });
+                      }}
                     >
                       {isChecked ? <CheckCircleFill /> : <Circle />}
                       {isChecked ? "チェック済み" : "未チェック（クリックでチェック）"}
@@ -1026,7 +1305,11 @@ export default function StatusMatcher() {
                               key={p}
                               type="button"
                               className="list-group-item list-group-item-action border-0 px-0 py-0 d-flex align-items-center bg-transparent"
-                              onClick={() => setFieldValue(focusField.field_key, p)}
+                              onClick={() => {
+                                const key = focusField.field_key;
+                                setFieldValue(key, p);
+                                advanceFlow(key, { ...valuesRef.current, [key]: { ...(valuesRef.current[key] || {}), value: p } });
+                              }}
                             >
                               <span
                                 className={`badge ${isSelected ? "bg-success" : "bg-light text-dark"} me-2 rounded-pill`}
@@ -1055,6 +1338,7 @@ export default function StatusMatcher() {
                         setManualText(e.target.value);
                         setFieldValue(focusField.field_key, e.target.value);
                       }}
+                      onBlur={() => advanceFlow(focusField.field_key)}
                     />
                   </div>
                 )}
@@ -1101,6 +1385,17 @@ export default function StatusMatcher() {
           } rounded-4 shadow-sm border-0`}
         >
           {statusMsg}
+        </div>
+      )}
+
+      {awaitingSaveConfirm && (
+        <div className="d-flex gap-2 justify-content-center">
+          <button type="button" className="btn btn-success" onClick={confirmSaveYes} disabled={savingRecord}>
+            はい（保存する）
+          </button>
+          <button type="button" className="btn btn-outline-secondary" onClick={confirmSaveNo} disabled={savingRecord}>
+            いいえ
+          </button>
         </div>
       )}
 
