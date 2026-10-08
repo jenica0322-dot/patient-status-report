@@ -102,6 +102,31 @@ export default function ReportPage() {
     })();
   }, [patientId, yearMonth]);
 
+  // A Target Field choice in Status Input is saved right away (possibly from
+  // another tab/screen) — quietly re-fetch so the report shows it without a
+  // manual refresh. No spinner, and a failed refresh keeps what's on screen.
+  useEffect(() => {
+    if (!patientId) return;
+    let cancelled = false;
+    const refresh = () => {
+      fetchPatientReport(patientId, yearMonth)
+        .then((data) => {
+          if (!cancelled) setReport(data);
+        })
+        .catch((e) => console.error("failed to refresh report", e));
+    };
+    const intervalId = setInterval(refresh, 5000);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") refresh();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      cancelled = true;
+      clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [patientId, yearMonth]);
+
   useEffect(() => {
     if (!patientId) {
       setReportPhotos([]);
