@@ -208,6 +208,45 @@
   background-clip: text;
 }
 
+/* 戻る / 次へ between Target Field entries */
+.targetNav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.targetNavBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  min-width: 120px;
+  padding: 0.55rem 1.25rem;
+  border-radius: 14px;
+  font-size: var(--text-fs);
+}
+
+.targetNavBack {
+  --bs-btn-color: var(--primary-text);
+  --bs-btn-bg: var(--primary-bg);
+  --bs-btn-border-color: var(--border-color-strong);
+  --bs-btn-hover-color: var(--primary-text);
+  --bs-btn-hover-bg: var(--accent-bg);
+  --bs-btn-hover-border-color: var(--border-color-strong);
+  --bs-btn-active-color: var(--primary-text);
+  --bs-btn-active-bg: var(--accent-bg);
+  --bs-btn-active-border-color: var(--border-color-strong);
+  --bs-btn-disabled-color: var(--secondary-text);
+  --bs-btn-disabled-bg: var(--primary-bg);
+  --bs-btn-disabled-border-color: var(--border-color);
+}
+
+.targetNavNext {
+  min-width: 160px;
+}
+
 .transcriptBox {
   background: var(--secondary-bg);
   border: 2px solid transparent;
