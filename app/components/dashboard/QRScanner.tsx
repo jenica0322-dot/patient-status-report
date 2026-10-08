@@ -188,7 +188,16 @@ export default function QRScanner({ onScan, onClose }: QRScannerProps) {
     const imageData = ctx.getImageData(0, 0, w, h);
     // Printed QR codes are dark-on-light; skipping the inverted pass halves
     // the cost of every frame that doesn't contain a code.
-    const code = jsQR(imageData.data, w, h, { inversionAttempts: "dontInvert" });
+    // jsQR can throw on some noisy frames (its locator push.apply()s large
+    // candidate lists, which overflows the call stack) — treat that frame as
+    // "no code" so the scan loop keeps running instead of dying uncaught.
+    let code: ReturnType<typeof jsQR> = null;
+    try {
+      code = jsQR(imageData.data, w, h, { inversionAttempts: "dontInvert" });
+    } catch (e) {
+      console.warn("jsQR decode failed on this frame", e);
+      return null;
+    }
     if (!code?.data) return null;
     // Corner points come back in the downscaled canvas's coordinates.
     const { topLeftCorner, topRightCorner, bottomRightCorner, bottomLeftCorner } = code.location;

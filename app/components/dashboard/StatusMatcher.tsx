@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useMemo, Fragment } from "react";
-import { MicFill, StopFill, CheckCircleFill, Circle, ChevronDown, CameraFill, QrCodeScan, Trash } from "react-bootstrap-icons";
+import { MicFill, StopFill, CheckCircleFill, Circle, ChevronDown, ChevronLeft, ChevronRight, CameraFill, QrCodeScan, Trash } from "react-bootstrap-icons";
 import { Spinner } from "react-bootstrap";
 import styles from "@/app/styles/StatusMatcher.module.css";
 import {
@@ -189,8 +189,10 @@ const UKETORI_OPTIONS = ["玄関", "家族", "不在"];
 // and save into those columns. Picking an option sets its own column and clears
 // whatever another option in the same picker had set, so only the final choice
 // stays in the report. `next` shows a follow-up choice instead of saving.
+// `multiple` pickers instead toggle each option on/off independently and only
+// move on to the next Target Field when 次へ is pressed (or said).
 type GroupOption = { label: string; key?: string; value?: any; next?: GroupOption[] };
-type GroupTargetField = { field_key: string; field_label: string; anchorKey: string; options: GroupOption[] };
+type GroupTargetField = { field_key: string; field_label: string; anchorKey: string; options: GroupOption[]; multiple?: boolean };
 
 const GROUP_TARGET_FIELDS: GroupTargetField[] = [
   {
@@ -207,6 +209,7 @@ const GROUP_TARGET_FIELDS: GroupTargetField[] = [
     field_key: "__taicho",
     field_label: "体調",
     anchorKey: "shokuyoku_teika",
+    multiple: true,
     options: [
       { label: "食欲低下", key: "shokuyoku_teika", value: true },
       { label: "顔色・元気", key: "kaoiro_genki", value: true },
@@ -216,8 +219,46 @@ const GROUP_TARGET_FIELDS: GroupTargetField[] = [
   },
 ];
 
+// Target Field dropdown entries: only うけとり and the picker-only group fields
+// (食べ残し / 体調), each group placed where its first column sits.
+function buildPickerFields(fields: Field[]): (Field | GroupTargetField)[] {
+  return fields.flatMap((f): (Field | GroupTargetField)[] => {
+    const group = GROUP_TARGET_FIELDS.find((g) => g.anchorKey === f.field_key);
+    if (group) return [group];
+    return f.field_key === "uketori" ? [f] : [];
+  });
+}
+
 function groupLeafOptions(options: GroupOption[]): GroupOption[] {
   return options.flatMap((o) => (o.next ? groupLeafOptions(o.next) : [o]));
+}
+
+// Spoken "done with this field" for a `multiple` picker (体調).
+const NEXT_FIELD_COMMAND = /^(次|つぎ|次へ|つぎへ|以上|いじょう|next)$/;
+
+// Every choice a picker-only Target Field shows, including follow-up choices
+// (体調他 → 風邪), so a spoken answer can be matched against any of them.
+function groupAllOptions(options: GroupOption[]): GroupOption[] {
+  return options.flatMap((o) => (o.next ? [o, ...groupAllOptions(o.next)] : [o]));
+}
+
+// Matches a spoken answer to one of the choices shown for the active Target
+// Field — exact (normalized) first, otherwise the closest choice that's still
+// clearly similar. Returns null when nothing is close enough.
+function matchChoice(utterance: string, choices: string[]): string | null {
+  const cleaned = normalizeJa(utterance);
+  if (!cleaned) return null;
+  let best: { choice: string; score: number } | null = null;
+  for (const choice of choices) {
+    const cleanedChoice = normalizeJa(choice);
+    if (!cleanedChoice) continue;
+    if (cleaned === cleanedChoice) return choice;
+    const dist = levenshteinDistance(cleaned, cleanedChoice);
+    const maxLen = Math.max(cleaned.length, cleanedChoice.length);
+    const sim = ((maxLen - dist) / maxLen) * 100;
+    if (!best || sim > best.score) best = { choice, score: sim };
+  }
+  return best && best.score >= 60 ? best.choice : null;
 }
 
 function isGroupOptionSelected(option: GroupOption, values: Record<string, { value?: any; comment?: string }>): boolean {
@@ -225,7 +266,7 @@ function isGroupOptionSelected(option: GroupOption, values: Record<string, { val
   return !!option.key && values[option.key]?.value === option.value;
 }
 
-function shouldSkipInAutoFlow(field: Field, values: Record<string, { value?: any; comment?: string }>) {
+function shouldSkipInAutoFlow(field: Pick<Field, "field_key" | "field_label">, values: Record<string, { value?: any; comment?: string }>) {
   // 利用者選択 exists so a patient can be picked as one of the Target Fields,
   // but the auto-flow only ever starts after a patient is already selected
   // (by QR, voice, or manual pick), so asking it again makes no sense here.
@@ -430,7 +471,11 @@ export default function StatusMatcher() {
     (async () => {
       const rows = await fetchStatusFields(screenKey);
       setFields(rows);
-      if (rows.length) setFocusKey(rows[0].field_key);
+      // Start on the first Target Field entry (うけとり) rather than the first
+      // master row (利用者選択); screens without entries keep the first row.
+      const firstPicker = buildPickerFields(rows)[0];
+      if (firstPicker) setFocusKey(firstPicker.field_key);
+      else if (rows.length) setFocusKey(rows[0].field_key);
       setManualText("");
     })();
   }, [screenKey]);
@@ -586,17 +631,7 @@ export default function StatusMatcher() {
     () => GROUP_TARGET_FIELDS.find((g) => g.field_key === focusKey),
     [focusKey]
   );
-  // Target Field dropdown entries: only 利用者選択, うけとり and the picker-only
-  // group fields (食べ残し / 体調), each group placed where its first column sits.
-  const pickerFields = useMemo(
-    () =>
-      fields.flatMap((f): (Field | GroupTargetField)[] => {
-        const group = GROUP_TARGET_FIELDS.find((g) => g.anchorKey === f.field_key);
-        if (group) return [group];
-        return f.field_label === PATIENT_SELECT_FIELD_LABEL || f.field_key === "uketori" ? [f] : [];
-      }),
-    [fields]
-  );
+  const pickerFields = useMemo(() => buildPickerFields(fields), [fields]);
   // Which group option (e.g. 体調他) currently has its follow-up choices open.
   const [openGroupOption, setOpenGroupOption] = useState<string | null>(null);
 
@@ -625,13 +660,30 @@ export default function StatusMatcher() {
       );
   };
 
-  const selectGroupOption = (group: GroupTargetField, option: GroupOption) => {
+  // `replace` (used for voice answers) clears the field's previous selection
+  // first so only the newly spoken option remains — even on a `multiple`
+  // picker, where a tap toggles options individually instead.
+  const selectGroupOption = (group: GroupTargetField, option: GroupOption, replace = false) => {
     if (option.next) {
       setOpenGroupOption(option.label);
       return;
     }
     const v = valuesRef.current;
     const next = { ...v };
+    if (group.multiple && !replace) {
+      const wasSelected = isGroupOptionSelected(option, v);
+      next[option.key!] = {
+        ...(v[option.key!] || {}),
+        value: wasSelected ? (option.value === true ? false : "") : option.value,
+      };
+      valuesRef.current = next;
+      setValues(next);
+      autoSaveSelection(next);
+      setStatusMsg(
+        `${group.field_label}: 「${option.label}」を${wasSelected ? "外しました" : "記録しました"}（複数選択可・終わったら「次へ」）`
+      );
+      return;
+    }
     for (const leaf of groupLeafOptions(group.options)) {
       if (!leaf.key || leaf.key === option.key) continue;
       if (v[leaf.key]?.value === leaf.value) {
@@ -834,7 +886,7 @@ export default function StatusMatcher() {
 
   // Moves the auto-flow to `field`: focuses it, resets the per-answer match
   // state, and asks the question by voice (which also (re)starts the mic).
-  const goToField = (field: Field) => {
+  const goToField = (field: Field | GroupTargetField) => {
     setFocusKey(field.field_key);
     focusKeyRef.current = field.field_key;
     // A new question expects a new answer — clear the duplicate-final guard
@@ -866,12 +918,12 @@ export default function StatusMatcher() {
     if (flowPhaseRef.current !== "field") return;
     if (focusKeyRef.current !== fromKey) return;
     const snapshot = valuesSnapshot ?? valuesRef.current;
-    const idx = fields.findIndex((f) => f.field_key === fromKey);
+    const idx = pickerFields.findIndex((f) => f.field_key === fromKey);
     if (idx === -1) return;
-    let next: Field | undefined;
-    for (let i = idx + 1; i < fields.length; i++) {
-      if (!shouldSkipInAutoFlow(fields[i], snapshot)) {
-        next = fields[i];
+    let next: Field | GroupTargetField | undefined;
+    for (let i = idx + 1; i < pickerFields.length; i++) {
+      if (!shouldSkipInAutoFlow(pickerFields[i], snapshot)) {
+        next = pickerFields[i];
         break;
       }
     }
@@ -880,6 +932,36 @@ export default function StatusMatcher() {
     } else {
       promptSaveConfirm();
     }
+  };
+
+  // 次へ (button, or said on 体調): inside the auto-flow, advance as usual (which
+  // asks the next question by voice); otherwise just move focus to the next
+  // Target Field entry.
+  const proceedToNextTargetField = (fromKey: string, valuesSnapshot?: Record<string, { value?: any; comment?: string }>) => {
+    if (flowPhaseRef.current === "field") {
+      advanceFlow(fromKey, valuesSnapshot);
+      return;
+    }
+    if (focusKeyRef.current !== fromKey) return;
+    const idx = pickerFields.findIndex((f) => f.field_key === fromKey);
+    const next = idx === -1 ? undefined : pickerFields[idx + 1];
+    if (!next) return;
+    setFocusKey(next.field_key);
+    focusKeyRef.current = next.field_key;
+  };
+
+  // 戻る: returns to the previous Target Field entry — inside the auto-flow it
+  // asks that field's question again by voice, otherwise it just moves focus.
+  const goToPrevTargetField = () => {
+    const idx = pickerFields.findIndex((f) => f.field_key === focusKeyRef.current);
+    if (idx <= 0) return;
+    const prev = pickerFields[idx - 1];
+    if (flowPhaseRef.current === "field") {
+      goToField(prev);
+      return;
+    }
+    setFocusKey(prev.field_key);
+    focusKeyRef.current = prev.field_key;
   };
 
   // Ends the voice-question flow once 保存しますか？ is answered (はい or いいえ):
@@ -907,12 +989,13 @@ export default function StatusMatcher() {
   };
 
   // Starts the sequential Target Field auto-flow from the first not-skipped
-  // field — called once a patient is newly selected (QR/voice/manual pick).
+  // Target Field entry (same entries, same order as the 対象フィールド dropdown)
+  // — called once a patient is newly selected (QR/voice/manual pick).
   const startAutoFlow = () => {
-    if (!fields.length) return;
+    if (!pickerFields.length) return;
     flowPhaseRef.current = "field";
     setAwaitingSaveConfirm(false);
-    const first = fields.find((f) => !shouldSkipInAutoFlow(f, valuesRef.current));
+    const first = pickerFields.find((f) => !shouldSkipInAutoFlow(f, valuesRef.current));
     if (!first) return;
     goToField(first);
   };
@@ -973,6 +1056,50 @@ export default function StatusMatcher() {
     }
   };
 
+  // Choices shown on screen for the active Target Field when it's a click-choice
+  // picker (食べ残し / 体調 / うけとり) — empty for any other focus.
+  const activeTargetChoices = (): string[] => {
+    const key = focusKeyRef.current;
+    const group = GROUP_TARGET_FIELDS.find((g) => g.field_key === key);
+    if (group) return groupAllOptions(group.options).map((o) => o.label);
+    if (key === "uketori" && fields.some((f) => f.field_key === key)) return UKETORI_OPTIONS;
+    return [];
+  };
+
+  // Records a spoken answer for the active click-choice Target Field exactly as
+  // tapping that choice would, then moves the flow on. Returns false if the
+  // utterance isn't one of its choices.
+  const answerTargetChoice = (rawFinal: string): boolean => {
+    const activeGroup = GROUP_TARGET_FIELDS.find((g) => g.field_key === focusKeyRef.current);
+    if (activeGroup?.multiple && NEXT_FIELD_COMMAND.test(normalizeJa(rawFinal))) {
+      proceedToNextTargetField(activeGroup.field_key);
+      return true;
+    }
+    const choice = matchChoice(rawFinal, activeTargetChoices());
+    if (!choice) return false;
+    const key = focusKeyRef.current;
+    const group = GROUP_TARGET_FIELDS.find((g) => g.field_key === key);
+    if (group) {
+      const option = groupAllOptions(group.options).find((o) => o.label === choice)!;
+      selectGroupOption(group, option, true);
+      if (option.next) {
+        lastFinalRef.current = "";
+        setStatusMsg(`${group.field_label}: 「${option.label}」— ${option.next.map((n) => n.label).join("・")} から選んでください`);
+      } else if (!group.multiple) {
+        advanceFlow(key, valuesRef.current);
+      }
+      return true;
+    }
+    const next = { ...valuesRef.current, [key]: { ...(valuesRef.current[key] || {}), value: choice } };
+    valuesRef.current = next;
+    setValues(next);
+    autoSaveSelection(next);
+    setMatchStatus("match");
+    setStatusMsg(`「${choice}」を記録しました`);
+    advanceFlow(key, next);
+    return true;
+  };
+
   // When a yes/no answer is expected (a focused checkbox field, or the final
   // 保存しますか？) and the recognizer's top guess isn't one but a lower-ranked
   // alternative is, use that alternative. Otherwise the top guess stands.
@@ -984,6 +1111,9 @@ export default function StatusMatcher() {
         const a = normalizeAnswer(t);
         return CONFIRM_SAVE_YES.test(a) || CONFIRM_SAVE_NO.test(a);
       };
+    } else if (activeTargetChoices().length) {
+      const choices = activeTargetChoices();
+      isAnswer = (t) => matchChoice(t, choices) !== null || NEXT_FIELD_COMMAND.test(normalizeJa(t));
     } else if (fields.find((f) => f.field_key === focusKeyRef.current)?.field_type === "checkbox") {
       isAnswer = isCheckboxAnswer;
     }
@@ -1037,6 +1167,11 @@ export default function StatusMatcher() {
       return;
     }
 
+    // Same for an answer naming one of the choices shown for the active
+    // click-choice Target Field (食べ残し / 体調 / うけとり) — e.g. "半分" answers
+    // 食べ残し rather than jumping to the hidden 半分 column field.
+    if (selectedPatientRef.current && answerTargetChoice(rawFinal)) return;
+
     // Date commands take priority over Target Field dictation — the 記録日/対象年月
     // field sits outside the fields list (it's not voice-selectable via bestFieldMatch),
     // so recognizing it here is the only way to reach it by voice. This is checked
@@ -1052,6 +1187,32 @@ export default function StatusMatcher() {
         setStatusMsg(`📅 対象年月を ${spokenDate.month} に設定しました`);
       }
       return;
+    }
+
+    // On a screen with Target Field entries (うけとり / 食べ残し / 体調), voice may
+    // only switch between those entries — a spoken word that happens to name one
+    // of the hidden report columns (メモ, 半分, 完食, …) must never become the
+    // displayed Target Field. If that column belongs to the current field, it's
+    // taken as the answer (完食 → なし, 残し → あり, …).
+    if (pickerFields.length) {
+      const pickerMatch = bestFieldMatch(rawFinal, pickerFields as unknown as Field[]);
+      if (pickerMatch && pickerMatch.field_key !== focusKeyRef.current) {
+        setFocusKey(pickerMatch.field_key);
+        focusKeyRef.current = pickerMatch.field_key;
+        setStatusMsg(`➡ ${pickerMatch.field_label} に切り替えました`);
+        setMatchStatus("none");
+        setMatches([]);
+        return;
+      }
+      const hiddenMatch = bestFieldMatch(rawFinal, fields);
+      if (hiddenMatch) {
+        const activeGroup = GROUP_TARGET_FIELDS.find((g) => g.field_key === focusKeyRef.current);
+        const leaf = activeGroup && groupLeafOptions(activeGroup.options).find((o) => o.key === hiddenMatch.field_key);
+        if (!(leaf && selectedPatientRef.current && answerTargetChoice(leaf.label))) {
+          setStatusMsg("候補に一致しませんでした");
+        }
+        return;
+      }
     }
 
     // Switching the Target Field by voice takes priority over any other interpretation,
@@ -1312,7 +1473,6 @@ export default function StatusMatcher() {
         <PatientSelector
           externalVoiceText={patientVoiceText}
           externalVoiceRequestId={patientVoiceRequestId}
-          locked={!isPatientSelectField}
           onExternalVoiceResult={({ matched, message, patient }) => {
             setIsSearching(false);
             // A voice search that found no one mustn't leave its "voice"
@@ -1373,7 +1533,7 @@ export default function StatusMatcher() {
                     <div className="card-body">
                       <h6 className="card-title d-flex align-items-center mb-1">
                         <span className="badge bg-primary me-2 rounded-pill">🎯</span>
-                        {focusGroupField.field_label} の候補（クリックで選択）
+                        {focusGroupField.field_label} の候補（{focusGroupField.multiple ? "複数選択可" : "クリックで選択"}）
                       </h6>
                       <div className="list-group list-group-flush">
                         {focusGroupField.options.map((o) => {
@@ -1469,10 +1629,12 @@ export default function StatusMatcher() {
                               onClick={() => {
                                 const key = focusField.field_key;
                                 setFieldValue(key, p);
+                                const snapshot = { ...valuesRef.current, [key]: { ...(valuesRef.current[key] || {}), value: p } };
                                 if (key === "uketori") {
-                                  autoSaveSelection({ ...valuesRef.current, [key]: { ...(valuesRef.current[key] || {}), value: p } });
+                                  autoSaveSelection(snapshot);
+                                } else {
+                                  advanceFlow(key, snapshot);
                                 }
-                                advanceFlow(key, { ...valuesRef.current, [key]: { ...(valuesRef.current[key] || {}), value: p } });
                               }}
                             >
                               <span
@@ -1530,6 +1692,43 @@ export default function StatusMatcher() {
                 )}
               </Fragment>
             )}
+
+            {(() => {
+              const idx = pickerFields.findIndex((f) => f.field_key === focusKey);
+              if (idx === -1) return null;
+              const hasPrev = idx > 0;
+              const hasNext = idx < pickerFields.length - 1 || flowPhaseRef.current === "field";
+              // On the last 対象フィールド (体調) there's nowhere to go next, so 次へ
+              // is disabled once one of its options has been selected.
+              const isLast = idx === pickerFields.length - 1;
+              const lastAnswered =
+                isLast &&
+                (focusGroupField
+                  ? groupLeafOptions(focusGroupField.options).some((o) => isGroupOptionSelected(o, values))
+                  : !!values[focusKey]?.value);
+              return (
+                <div className={styles.targetNav}>
+                  <button
+                    type="button"
+                    className={`btn btn-outline-secondary ${styles.targetNavBtn} ${styles.targetNavBack}`}
+                    onClick={goToPrevTargetField}
+                    disabled={!hasPrev}
+                  >
+                    <ChevronLeft size={16} />
+                    戻る
+                  </button>
+                  <button
+                    type="button"
+                    className={`btn btn-primary ${styles.targetNavBtn} ${styles.targetNavNext}`}
+                    onClick={() => proceedToNextTargetField(focusKey)}
+                    disabled={!hasNext || lastAnswered}
+                  >
+                    次へ
+                    <ChevronRight size={16} />
+                  </button>
+                </div>
+              );
+            })()}
           </div>
         )}
       </div>
