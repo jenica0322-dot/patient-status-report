@@ -181,6 +181,50 @@ const MUTUALLY_EXCLUSIVE_FIELD_GROUPS: string[][] = [
   ["kanshoku", "hanbun", "nokoshi"], // 完食 / 半分 / 残し
 ];
 
+// Click choices shown for うけとり in place of its stored phrases. The chosen
+// label itself is what gets saved to the uketori field.
+const UKETORI_OPTIONS = ["玄関", "家族", "不在"];
+
+// Picker-only Target Fields that sit in front of an existing report column group
+// and save into those columns. Picking an option sets its own column and clears
+// whatever another option in the same picker had set, so only the final choice
+// stays in the report. `next` shows a follow-up choice instead of saving.
+type GroupOption = { label: string; key?: string; value?: any; next?: GroupOption[] };
+type GroupTargetField = { field_key: string; field_label: string; anchorKey: string; options: GroupOption[] };
+
+const GROUP_TARGET_FIELDS: GroupTargetField[] = [
+  {
+    field_key: "__tabenokoshi",
+    field_label: "食べ残し",
+    anchorKey: "kanshoku",
+    options: [
+      { label: "なし", key: "kanshoku", value: true },
+      { label: "半分", key: "hanbun", value: true },
+      { label: "あり", key: "nokoshi", value: true },
+    ],
+  },
+  {
+    field_key: "__taicho",
+    field_label: "体調",
+    anchorKey: "shokuyoku_teika",
+    options: [
+      { label: "食欲低下", key: "shokuyoku_teika", value: true },
+      { label: "顔色・元気", key: "kaoiro_genki", value: true },
+      { label: "ふらつき", key: "furatsuki", value: true },
+      { label: "体調他", next: [{ label: "風邪", key: "taicho_ta", value: "風邪" }] },
+    ],
+  },
+];
+
+function groupLeafOptions(options: GroupOption[]): GroupOption[] {
+  return options.flatMap((o) => (o.next ? groupLeafOptions(o.next) : [o]));
+}
+
+function isGroupOptionSelected(option: GroupOption, values: Record<string, { value?: any; comment?: string }>): boolean {
+  if (option.next) return option.next.some((n) => isGroupOptionSelected(n, values));
+  return !!option.key && values[option.key]?.value === option.value;
+}
+
 function shouldSkipInAutoFlow(field: Field, values: Record<string, { value?: any; comment?: string }>) {
   // 利用者選択 exists so a patient can be picked as one of the Target Fields,
   // but the auto-flow only ever starts after a patient is already selected
@@ -538,10 +582,73 @@ export default function StatusMatcher() {
     [fields, focusKey]
   );
   const isPatientSelectField = focusField?.field_label === PATIENT_SELECT_FIELD_LABEL;
+  const focusGroupField = useMemo(
+    () => GROUP_TARGET_FIELDS.find((g) => g.field_key === focusKey),
+    [focusKey]
+  );
+  // Target Field dropdown entries: only 利用者選択, うけとり and the picker-only
+  // group fields (食べ残し / 体調), each group placed where its first column sits.
+  const pickerFields = useMemo(
+    () =>
+      fields.flatMap((f): (Field | GroupTargetField)[] => {
+        const group = GROUP_TARGET_FIELDS.find((g) => g.anchorKey === f.field_key);
+        if (group) return [group];
+        return f.field_label === PATIENT_SELECT_FIELD_LABEL || f.field_key === "uketori" ? [f] : [];
+      }),
+    [fields]
+  );
+  // Which group option (e.g. 体調他) currently has its follow-up choices open.
+  const [openGroupOption, setOpenGroupOption] = useState<string | null>(null);
+
+  // Saves the record in the background right after a Target Field choice is
+  // clicked, so the Report reflects it without waiting for 保存. Saves run one
+  // after another so a quick second click can't be overwritten by the first.
+  // Photos are still only uploaded by 保存.
+  const autoSaveChainRef = useRef<Promise<void>>(Promise.resolve());
+  const autoSaveSelection = (nextValues: Record<string, { value?: any; comment?: string }>) => {
+    const patient = selectedPatientRef.current;
+    if (!patient) return;
+    const screen = screenKeyRef.current;
+    const baseParams =
+      screen === "daily_status"
+        ? { screen_key: screen, patient_id: patient.id, record_date: recordDateRef.current }
+        : { screen_key: screen, patient_id: patient.id, record_year_month: yearMonthRef.current };
+    const payloadValues =
+      screen === "daily_status"
+        ? { ...nextValues, delivery_person: { value: user?.username || "" } }
+        : nextValues;
+    autoSaveChainRef.current = autoSaveChainRef.current
+      .then(() => saveStatusRecord({ ...baseParams, values: payloadValues }))
+      .then(
+        () => {},
+        (e) => console.error("auto-save failed", e)
+      );
+  };
+
+  const selectGroupOption = (group: GroupTargetField, option: GroupOption) => {
+    if (option.next) {
+      setOpenGroupOption(option.label);
+      return;
+    }
+    const v = valuesRef.current;
+    const next = { ...v };
+    for (const leaf of groupLeafOptions(group.options)) {
+      if (!leaf.key || leaf.key === option.key) continue;
+      if (v[leaf.key]?.value === leaf.value) {
+        next[leaf.key] = { ...(v[leaf.key] || {}), value: leaf.value === true ? false : "" };
+      }
+    }
+    next[option.key!] = { ...(v[option.key!] || {}), value: option.value };
+    valuesRef.current = next;
+    setValues(next);
+    autoSaveSelection(next);
+    setStatusMsg(`${group.field_label}: 「${option.label}」を記録しました`);
+  };
 
   useEffect(() => {
     setManualText(String(values[focusKey]?.value ?? ""));
     setFieldMenuOpen(false);
+    setOpenGroupOption(null);
   }, [focusKey]);
 
   useEffect(() => {
@@ -1235,7 +1342,7 @@ export default function StatusMatcher() {
                 className={`${styles.fieldTrigger} ${fieldMenuOpen ? styles.fieldTriggerOpen : ""}`}
                 onClick={() => setFieldMenuOpen((v) => !v)}
               >
-                <span>{focusField?.field_label ?? "選択してください"}</span>
+                <span>{(focusField ?? focusGroupField)?.field_label ?? "選択してください"}</span>
                 <ChevronDown
                   size={14}
                   className={`${styles.fieldChevron} ${fieldMenuOpen ? styles.fieldChevronOpen : ""}`}
@@ -1243,7 +1350,7 @@ export default function StatusMatcher() {
               </button>
               {fieldMenuOpen && (
                 <div className={styles.fieldPanel}>
-                  {fields.map((f) => (
+                  {pickerFields.map((f) => (
                     <button
                       key={f.field_key}
                       type="button"
@@ -1261,7 +1368,59 @@ export default function StatusMatcher() {
 
             {!isPatientSelectField && (
               <Fragment key={focusKey ?? "none"}>
-                {focusField?.field_type !== "checkbox" && (
+                {focusGroupField && (
+                  <div key={`group-${focusGroupField.field_key}`} className="card border-0 shadow-sm rounded-4 mt-1">
+                    <div className="card-body">
+                      <h6 className="card-title d-flex align-items-center mb-1">
+                        <span className="badge bg-primary me-2 rounded-pill">🎯</span>
+                        {focusGroupField.field_label} の候補（クリックで選択）
+                      </h6>
+                      <div className="list-group list-group-flush">
+                        {focusGroupField.options.map((o) => {
+                          const isSelected = isGroupOptionSelected(o, values);
+                          const showNext = !!o.next && (openGroupOption === o.label || isSelected);
+                          return (
+                            <Fragment key={o.label}>
+                              <button
+                                type="button"
+                                className="list-group-item list-group-item-action border-0 px-0 py-0 d-flex align-items-center bg-transparent"
+                                onClick={() => selectGroupOption(focusGroupField, o)}
+                              >
+                                <span
+                                  className={`badge ${isSelected ? "bg-success" : "bg-light text-dark"} me-2 rounded-pill`}
+                                >
+                                  {isSelected ? "✅" : "・"}
+                                </span>
+                                <span className={`fw-medium ${isSelected ? "text-success" : ""}`}>{o.label}</span>
+                              </button>
+                              {showNext &&
+                                o.next!.map((n) => {
+                                  const isNextSelected = isGroupOptionSelected(n, values);
+                                  return (
+                                    <button
+                                      key={n.label}
+                                      type="button"
+                                      className="list-group-item list-group-item-action border-0 ps-4 pe-0 py-0 d-flex align-items-center bg-transparent"
+                                      onClick={() => selectGroupOption(focusGroupField, n)}
+                                    >
+                                      <span
+                                        className={`badge ${isNextSelected ? "bg-success" : "bg-light text-dark"} me-2 rounded-pill`}
+                                      >
+                                        {isNextSelected ? "✅" : "・"}
+                                      </span>
+                                      <span className={`fw-medium ${isNextSelected ? "text-success" : ""}`}>{n.label}</span>
+                                    </button>
+                                  );
+                                })}
+                            </Fragment>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {!focusGroupField && focusField?.field_type !== "checkbox" && (
                   <Fragment key="raw-value">
                     <label style={{ marginTop: 4 }}>現在の値</label>
                     <p>
@@ -1290,15 +1449,17 @@ export default function StatusMatcher() {
                   );
                 })()}
 
-                {focusField && focusField.field_type === "preset" && focusField.phrases?.length > 0 && (
+                {focusField && focusField.field_type === "preset" && focusField.phrases?.length > 0 && (() => {
+                  const presetOptions = focusField.field_key === "uketori" ? UKETORI_OPTIONS : focusField.phrases;
+                  return (
                   <div key={`preset-${focusField.field_key}`} className="card border-0 shadow-sm rounded-4 mt-1">
                     <div className="card-body">
                       <h6 className="card-title d-flex align-items-center mb-1">
                         <span className="badge bg-primary me-2 rounded-pill">🎯</span>
-                        {focusField.field_label} の候補（クリックで選択、{focusField.phrases.length}件）
+                        {focusField.field_label} の候補（クリックで選択、{presetOptions.length}件）
                       </h6>
                       <div className="list-group list-group-flush">
-                        {focusField.phrases.map((p) => {
+                        {presetOptions.map((p) => {
                           const isSelected = values[focusField.field_key]?.value === p;
                           return (
                             <button
@@ -1308,6 +1469,9 @@ export default function StatusMatcher() {
                               onClick={() => {
                                 const key = focusField.field_key;
                                 setFieldValue(key, p);
+                                if (key === "uketori") {
+                                  autoSaveSelection({ ...valuesRef.current, [key]: { ...(valuesRef.current[key] || {}), value: p } });
+                                }
                                 advanceFlow(key, { ...valuesRef.current, [key]: { ...(valuesRef.current[key] || {}), value: p } });
                               }}
                             >
@@ -1323,7 +1487,8 @@ export default function StatusMatcher() {
                       </div>
                     </div>
                   </div>
-                )}
+                  );
+                })()}
 
                 {focusField && focusField.field_type === "text" && (
                   <div key={`text-${focusField.field_key}`} className="mt-1">
