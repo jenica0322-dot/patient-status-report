@@ -1393,7 +1393,7 @@ export default function StatusMatcher() {
                   type="button"
                   // 月次報告 is hidden from view; its screen and logic are left as they are.
                   hidden={s.key === "monthly_report"}
-                  className={`btn btn-sm ${screenKey === s.key ? "btn-primary" : "btn-outline-primary"}`}
+                  className={`btn btn-sm ${styles.toolbarBtn} ${screenKey === s.key ? "btn-primary" : "btn-outline-primary"}`}
                   onClick={() => setScreenKey(s.key)}
                 >
                   {s.label}
@@ -1402,7 +1402,8 @@ export default function StatusMatcher() {
             </div>
             {screenKey === "daily_status" ? (
               <JaDateInput
-                className="form-control form-control-sm"
+                className={`form-control form-control-sm ${styles.toolbarBtn}`}
+                maxWidth={250}
                 value={recordDate}
                 onChange={setRecordDate}
               />
@@ -1415,10 +1416,10 @@ export default function StatusMatcher() {
             )}
             <button
               type="button"
-              className={`btn btn-sm btn-outline-primary ${styles.photoUploadBtn}`}
+              className={`btn btn-sm btn-outline-primary ${styles.photoUploadBtn} ${styles.toolbarBtn}`}
               onClick={handlePhotoButtonClick}
             >
-              <CameraFill size={14} />
+              <CameraFill size="1em" />
               <span>写真追加</span>
             </button>
             <input
@@ -1430,17 +1431,17 @@ export default function StatusMatcher() {
             />
             <button
               type="button"
-              className={`btn btn-sm btn-outline-primary ${styles.photoUploadBtn}`}
+              className={`btn btn-sm btn-outline-primary ${styles.photoUploadBtn} ${styles.toolbarBtn}`}
               onClick={() => setQrOpen(true)}
               disabled={isSearching}
             >
-              <QrCodeScan size={14} />
+              <QrCodeScan size="1em" />
               <span>QR読取</span>
             </button>
             {allTargetFieldsAnswered && (
               <button
                 type="button"
-                className="btn btn-success ms-auto px-4 fw-bold"
+                className={`btn btn-success ms-auto px-4 fw-bold ${styles.toolbarBtn}`}
                 onClick={handleSaveRecord}
                 disabled={savingRecord}
               >
@@ -1571,7 +1572,7 @@ export default function StatusMatcher() {
                 {focusGroupField && (
                   <div key={`group-${focusGroupField.field_key}`} className="card border-0 shadow-sm rounded-4 mt-1">
                     <div className="card-body">
-                      <h6 className="card-title d-flex align-items-center mb-1">
+                      <h6 className={`card-title d-flex align-items-center mb-1 ${styles.choiceTitle}`}>
                         <span className="badge bg-primary me-2 rounded-pill">🎯</span>
                         {focusGroupField.field_label} の候補（{focusGroupField.multiple ? "複数選択可" : "クリックで選択"}）
                       </h6>
@@ -1596,7 +1597,7 @@ export default function StatusMatcher() {
                                 >
                                   {isSelected ? "✅" : "・"}
                                 </span>
-                                <span className={`fw-medium ${isSelected ? "text-success" : ""}`}>{o.label}</span>
+                                <span className={`fw-medium ${styles.choiceLabel} ${isSelected ? "text-success" : ""}`}>{o.label}</span>
                               </button>
                               {showNext &&
                                 o.next!.map((n) => {
@@ -1616,7 +1617,7 @@ export default function StatusMatcher() {
                                       >
                                         {isNextSelected ? "✅" : "・"}
                                       </span>
-                                      <span className={`fw-medium ${isNextSelected ? "text-success" : ""}`}>{n.label}</span>
+                                      <span className={`fw-medium ${styles.choiceLabel} ${isNextSelected ? "text-success" : ""}`}>{n.label}</span>
                                     </button>
                                   );
                                 })}
@@ -1626,15 +1627,6 @@ export default function StatusMatcher() {
                       </div>
                     </div>
                   </div>
-                )}
-
-                {!focusGroupField && focusField?.field_type !== "checkbox" && (
-                  <Fragment key="raw-value">
-                    <label style={{ marginTop: 4 }}>現在の値</label>
-                    <p>
-                      {focusKey ? JSON.stringify(values[focusKey]?.value ?? "", null, 0) : "---"}
-                    </p>
-                  </Fragment>
                 )}
 
                 {/* Manual input, in addition to voice */}
@@ -1662,7 +1654,7 @@ export default function StatusMatcher() {
                   return (
                   <div key={`preset-${focusField.field_key}`} className="card border-0 shadow-sm rounded-4 mt-1">
                     <div className="card-body">
-                      <h6 className="card-title d-flex align-items-center mb-1">
+                      <h6 className={`card-title d-flex align-items-center mb-1 ${styles.choiceTitle}`}>
                         <span className="badge bg-primary me-2 rounded-pill">🎯</span>
                         {focusField.field_label} の候補（クリックで選択、{presetOptions.length}件）
                       </h6>
@@ -1687,7 +1679,7 @@ export default function StatusMatcher() {
                               >
                                 {isSelected ? "✅" : "・"}
                               </span>
-                              <span className={`fw-medium ${isSelected ? "text-success" : ""}`}>{p}</span>
+                              <span className={`fw-medium ${styles.choiceLabel} ${isSelected ? "text-success" : ""}`}>{p}</span>
                             </button>
                           );
                         })}
@@ -1725,7 +1717,7 @@ export default function StatusMatcher() {
       {selectedPatient && commentKey && !isPatientSelectField && (
         <div key={`comment-${commentKey}`} className={styles.commentBox}>
           <label htmlFor="target-field-comment" className={styles.commentLabel}>
-            <ChatLeftText size={16} />
+            <ChatLeftText size="1em" />
             コメント（自由入力）
           </label>
           <textarea
@@ -1778,7 +1770,7 @@ export default function StatusMatcher() {
           aria-label={isListening ? "リスニング停止" : "リスニング開始"}
           disabled={isSearching}
         >
-          {isListening ? <StopFill size={22} /> : <MicFill size={22} />}
+          {isListening ? <StopFill size={28} /> : <MicFill size={28} />}
         </button>
         {isSearching && <p className={styles.statusText}>検索中…</p>}
       </div>

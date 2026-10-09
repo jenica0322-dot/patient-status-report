@@ -99,6 +99,12 @@
   align-items: center;
 }
 
+/* 日次記録 / 記録日 / 写真追加 / QR読取 / 保存 — 18px text. Doubled class
+   beats Bootstrap's .btn-sm / .form-control-sm font size. */
+.toolbarBtn.toolbarBtn {
+  font-size: 18px;
+}
+
 .photoUploadBtn {
   display: inline-flex;
   align-items: center;
@@ -208,6 +214,64 @@
   background-clip: text;
 }
 
+/* Target Field choice lists (うけとり / 食べ残し / 体調) — large, full-width tap
+   targets. Row height and text scale with the screen height (clamped), so the
+   longest list (体調, 5 rows) always fits on screen without scrolling. */
+.choiceTitle {
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.choiceList.choiceList {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(0.35rem, 1vh, 0.55rem);
+}
+
+.choiceList .choiceItem {
+  min-height: clamp(50px, 8vh, 64px);
+  gap: 0.9rem;
+  padding: 0.5rem 1rem;
+  border: 2px solid var(--border-color);
+  border-radius: 14px;
+  background: var(--primary-bg);
+  color: var(--primary-text);
+}
+
+.choiceList .choiceItemNested {
+  margin-left: 1.75rem;
+}
+
+.choiceList .choiceItemSelected {
+  border-color: var(--bs-success);
+  background: var(--bs-success-bg-subtle);
+}
+
+.choiceMark {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: clamp(32px, 4.8vh, 38px);
+  height: clamp(32px, 4.8vh, 38px);
+  border-radius: 50%;
+  border: 2px solid var(--border-color-strong);
+  background: var(--secondary-bg);
+  font-size: 1.05rem;
+  line-height: 1;
+}
+
+.choiceMarkSelected {
+  border-color: var(--bs-success);
+  background: var(--bs-success);
+}
+
+.choiceLabel {
+  font-size: clamp(1.25rem, 3.1vh, 1.5rem);
+  font-weight: 700;
+  line-height: 1.2;
+}
+
 /* コメント（自由入力） — its own card below the Target Field panel */
 .commentBox {
   background: var(--primary-bg);
@@ -222,7 +286,7 @@
   align-items: center;
   gap: 0.4rem;
   margin-bottom: 0.3rem;
-  font-size: var(--text-fs);
+  font-size: 18px;
   font-weight: 700;
   color: var(--accent-text);
 }
@@ -300,8 +364,8 @@
 }
 
 .micButton {
-  width: 60px;
-  height: 60px;
+  width: 72px;
+  height: 72px;
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -516,7 +580,7 @@
   }
 
   .micButton {
-    width: 52px;
-    height: 52px;
+    width: 64px;
+    height: 64px;
   }
 }
