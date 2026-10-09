@@ -109,6 +109,15 @@
   font-size: 0.9rem;
 }
 
+/* iOS Safari zooms the page in when an input under 16px is focused (this one
+   autofocuses as soon as the list opens), and stays zoomed after a patient is
+   picked. 16px on touch devices prevents that without changing the desktop look. */
+@media (hover: none) and (pointer: coarse) {
+  .searchBox input {
+    font-size: 16px;
+  }
+}
+
 .areaDropdown {
   position: relative;
   flex: 1 1 180px;

@@ -63,6 +63,9 @@ type PatientSelectorProps = {
   externalVoiceText?: string;
   externalVoiceRequestId?: number;
   onExternalVoiceResult?: (result: { matched: boolean; message: string; patient?: Patient }) => void;
+  // Called just before a patient picked by hand from the list is selected
+  // (not for voice-search matches).
+  onManualSelect?: (patient: Patient) => void;
   locked?: boolean;
 };
 
@@ -70,6 +73,7 @@ export default function PatientSelector({
   externalVoiceText,
   externalVoiceRequestId,
   onExternalVoiceResult,
+  onManualSelect,
   locked = false,
 }: PatientSelectorProps) {
   const { selectedPatient, selectPatient } = usePatient();
@@ -377,7 +381,10 @@ export default function PatientSelector({
                       key={p.id}
                       type="button"
                       className={`${styles.item} ${isSelected ? styles.itemSelected : ""}`}
-                      onClick={() => handleSelect(p)}
+                      onClick={() => {
+                        onManualSelect?.(p);
+                        handleSelect(p);
+                      }}
                     >
                       <span className={styles.itemName}>{p.name}</span>
                       <span className={styles.itemMeta}>
