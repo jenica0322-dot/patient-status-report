@@ -87,6 +87,7 @@
 
 .buttonText {
   margin-left: 0.9rem;
+  font-size: 16px;
   opacity: 1;
   transition: all 0.2s ease-in-out;
 }
@@ -145,7 +146,7 @@
   word-wrap: break-word;
   opacity: 1;
   transition: all 0.2s;
-  font-size: 0.85rem;
+  font-size: 16px;
   color: var(--primary-text, #1e293b);
 }
 
@@ -165,7 +166,7 @@
   background-color: var(--brand-50, #f0fdfa);
   color: var(--brand-800, #115e59);
   border: 1px solid var(--brand-100, #ccfbf1);
-  font-size: 0.78rem;
+  font-size: 16px;
 }
 
 .toggleButton {

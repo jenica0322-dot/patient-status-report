@@ -6,11 +6,8 @@
 }
 
 .label {
-  /* Shared with StatusMatcher's --label-fs/--text-fs (this component is
-     always rendered inside that page's wrapper, which defines them) so the
-     "対象利用者" label and its value line up with every other label/text
-     pair on the page instead of drifting to their own size. */
-  font-size: var(--label-fs, 0.75rem);
+  /* "対象利用者" label and the selected patient name (.trigger) are both 18px. */
+  font-size: 18px;
   font-weight: 600;
   color: var(--secondary-text);
   display: block;
@@ -29,7 +26,7 @@
   border: 2px solid var(--border-color);
   background: var(--primary-bg);
   color: var(--primary-text);
-  font-size: var(--text-fs, 0.85rem);
+  font-size: 18px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
