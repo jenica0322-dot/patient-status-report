@@ -208,43 +208,49 @@
   background-clip: text;
 }
 
-/* 戻る / 次へ between Target Field entries */
-.targetNav {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 0.75rem;
-  margin-top: 0.75rem;
-}
-
-.targetNavBtn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.4rem;
-  min-width: 120px;
-  padding: 0.55rem 1.25rem;
+/* コメント（自由入力） — its own card below the Target Field panel */
+.commentBox {
+  background: var(--primary-bg);
+  border: 1px solid var(--border-color);
   border-radius: 14px;
+  padding: 0.45rem 0.6rem 0.55rem;
+  box-shadow: var(--shadow-md);
+}
+
+.commentLabel {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.3rem;
   font-size: var(--text-fs);
+  font-weight: 700;
+  color: var(--accent-text);
 }
 
-.targetNavBack {
-  --bs-btn-color: var(--primary-text);
-  --bs-btn-bg: var(--primary-bg);
-  --bs-btn-border-color: var(--border-color-strong);
-  --bs-btn-hover-color: var(--primary-text);
-  --bs-btn-hover-bg: var(--accent-bg);
-  --bs-btn-hover-border-color: var(--border-color-strong);
-  --bs-btn-active-color: var(--primary-text);
-  --bs-btn-active-bg: var(--accent-bg);
-  --bs-btn-active-border-color: var(--border-color-strong);
-  --bs-btn-disabled-color: var(--secondary-text);
-  --bs-btn-disabled-bg: var(--primary-bg);
-  --bs-btn-disabled-border-color: var(--border-color);
+.commentInput {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  padding: 0.4rem 0.6rem;
+  font-size: var(--text-fs);
+  line-height: 1.4;
+  color: var(--primary-text);
+  background: var(--secondary-bg);
+  border: 1.5px solid var(--border-color-strong);
+  border-radius: 10px;
+  resize: vertical;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
-.targetNavNext {
-  min-width: 160px;
+.commentInput::placeholder {
+  color: var(--secondary-text);
+}
+
+.commentInput:focus {
+  outline: none;
+  border-color: var(--accent-text);
+  background: var(--primary-bg);
+  box-shadow: 0 0 0 3px var(--accent-bg);
 }
 
 .transcriptBox {

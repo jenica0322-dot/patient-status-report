@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useMemo, Fragment } from "react";
-import { MicFill, StopFill, CheckCircleFill, Circle, ChevronDown, ChevronLeft, ChevronRight, CameraFill, QrCodeScan, Trash } from "react-bootstrap-icons";
+import { MicFill, StopFill, CheckCircleFill, Circle, ChevronDown, ChatLeftText, CameraFill, QrCodeScan, Trash } from "react-bootstrap-icons";
 import { Spinner } from "react-bootstrap";
 import styles from "@/app/styles/StatusMatcher.module.css";
 import {
@@ -19,7 +19,7 @@ import PatientSelector from "@/app/components/dashboard/PatientSelector";
 import PhotoLightbox from "@/app/components/dashboard/PhotoLightbox";
 import CameraCapture from "@/app/components/dashboard/CameraCapture";
 import QRScanner from "@/app/components/dashboard/QRScanner";
-import { normalizeSpokenDigits } from "@/app/lib/voiceText";
+import { normalizeSpokenDigits, toHiragana } from "@/app/lib/voiceText";
 import { findPatientByTargetUserId, parseTargetUserId } from "@/app/lib/qrTargetUser";
 
 declare global {
@@ -84,6 +84,15 @@ function isLikelyPatientShortcut(text: string) {
   // "まる"/"れい" reading of 0 — neither of which is plain [0-9] or hiragana text.
   if (normalizeSpokenDigits(text).length >= 2) return true;
   return false;
+}
+
+// True when the whole utterance is a spoken ID — digits, kanji digits, or the
+// まる/れい/ぜろ reading of 0 — and nothing else (at least 2 digits).
+function isSpokenIdOnly(text: string) {
+  const normalized = normalizeJa(text);
+  if (!normalized) return false;
+  const rest = toHiragana(normalized).replace(/まる|ぜろ|れい/g, "").replace(/[0-9０-９〇零一二三四五六七八九.ー-]/g, "");
+  return rest === "" && normalizeSpokenDigits(text).length >= 2;
 }
 
 // Labels like "顔色/元気", "新聞/郵便", or "体調面・一言" join two spoken concepts with
@@ -190,7 +199,7 @@ const UKETORI_OPTIONS = ["玄関", "家族", "不在"];
 // whatever another option in the same picker had set, so only the final choice
 // stays in the report. `next` shows a follow-up choice instead of saving.
 // `multiple` pickers instead toggle each option on/off independently and only
-// move on to the next Target Field when 次へ is pressed (or said).
+// move on to the next Target Field when 次へ is said.
 type GroupOption = { label: string; key?: string; value?: any; next?: GroupOption[] };
 type GroupTargetField = { field_key: string; field_label: string; anchorKey: string; options: GroupOption[]; multiple?: boolean };
 
@@ -425,11 +434,11 @@ export default function StatusMatcher() {
   // screen mounts/reloads (e.g. restored from localStorage) — it should only
   // kick in the moment a patient is newly selected during this session.
   const patientFlowMountedRef = useRef(false);
-  // How the next patient selection is being made. Set just before a QR scan
-  // or voice search selects a patient; anything else (picking from the list
-  // by hand) leaves it null. Only QR/voice selections start the auto-flow —
-  // a manual pick leaves Target Field choice to the user (tap or voice).
-  const patientSelectSourceRef = useRef<"qr" | "voice" | null>(null);
+  // How the next patient selection is being made. Set just before a QR scan,
+  // voice search or manual pick from the list selects a patient; anything
+  // else (e.g. the patient restored from localStorage on reload) leaves it
+  // null. Only these user selections start the auto-flow.
+  const patientSelectSourceRef = useRef<"qr" | "voice" | "manual" | null>(null);
 
   useEffect(() => {
     focusKeyRef.current = focusKey;
@@ -506,8 +515,8 @@ export default function StatusMatcher() {
   }, [selectedPatient, screenKey, recordDate, yearMonth]);
 
   // Kicks off the sequential Target Field auto-flow the moment a patient is
-  // newly selected by QR scan or voice search — but not for a manual pick
-  // from the list, nor for a patient already selected when this screen first
+  // newly selected by QR scan, voice search or a manual pick from the list —
+  // but not for a patient already selected when this screen first
   // mounts/reloads.
   useEffect(() => {
     const source = patientSelectSourceRef.current;
@@ -520,9 +529,9 @@ export default function StatusMatcher() {
     if (source) {
       startAutoFlow();
     } else {
-      // Manual pick: end any auto-flow still running for the previous
-      // patient, so its questions don't carry on for this one. The mic is
-      // left as it is, so Target Fields can be chosen by voice or by tap.
+      // Selected some other way (e.g. restored after reload): end any
+      // auto-flow still running for the previous patient, so its questions
+      // don't carry on for this one. The mic is left as it is.
       const wasActive = flowPhaseRef.current !== "off";
       flowPhaseRef.current = "off";
       setAwaitingSaveConfirm(false);
@@ -632,6 +641,24 @@ export default function StatusMatcher() {
     [focusKey]
   );
   const pickerFields = useMemo(() => buildPickerFields(fields), [fields]);
+  // Where the comment box reads/writes for the focused Target Field. Picker-only
+  // fields (食べ残し / 体調) have no column of their own, so their comment goes
+  // on the report column they sit in front of.
+  const commentKey = focusGroupField ? focusGroupField.anchorKey : focusField?.field_key;
+  // 保存 is only shown once every Target Field has an answer (skipped ones
+  // don't count). A `multiple` picker (体調) may legitimately be left empty,
+  // so it never holds this back. Screens without Target Fields always show it.
+  const allTargetFieldsAnswered = useMemo(
+    () =>
+      pickerFields.every((f) => {
+        if (shouldSkipInAutoFlow(f, values)) return true;
+        const group = GROUP_TARGET_FIELDS.find((g) => g.field_key === f.field_key);
+        if (group) return !!group.multiple || groupLeafOptions(group.options).some((o) => isGroupOptionSelected(o, values));
+        const v = values[f.field_key]?.value;
+        return v !== undefined && v !== null && v !== "";
+      }),
+    [pickerFields, values]
+  );
   // Which group option (e.g. 体調他) currently has its follow-up choices open.
   const [openGroupOption, setOpenGroupOption] = useState<string | null>(null);
 
@@ -680,7 +707,7 @@ export default function StatusMatcher() {
       setValues(next);
       autoSaveSelection(next);
       setStatusMsg(
-        `${group.field_label}: 「${option.label}」を${wasSelected ? "外しました" : "記録しました"}（複数選択可・終わったら「次へ」）`
+        `${group.field_label}: 「${option.label}」を${wasSelected ? "外しました" : "記録しました"}（複数選択可）`
       );
       return;
     }
@@ -934,7 +961,7 @@ export default function StatusMatcher() {
     }
   };
 
-  // 次へ (button, or said on 体調): inside the auto-flow, advance as usual (which
+  // 次へ (said on 体調): inside the auto-flow, advance as usual (which
   // asks the next question by voice); otherwise just move focus to the next
   // Target Field entry.
   const proceedToNextTargetField = (fromKey: string, valuesSnapshot?: Record<string, { value?: any; comment?: string }>) => {
@@ -948,20 +975,6 @@ export default function StatusMatcher() {
     if (!next) return;
     setFocusKey(next.field_key);
     focusKeyRef.current = next.field_key;
-  };
-
-  // 戻る: returns to the previous Target Field entry — inside the auto-flow it
-  // asks that field's question again by voice, otherwise it just moves focus.
-  const goToPrevTargetField = () => {
-    const idx = pickerFields.findIndex((f) => f.field_key === focusKeyRef.current);
-    if (idx <= 0) return;
-    const prev = pickerFields[idx - 1];
-    if (flowPhaseRef.current === "field") {
-      goToField(prev);
-      return;
-    }
-    setFocusKey(prev.field_key);
-    focusKeyRef.current = prev.field_key;
   };
 
   // Ends the voice-question flow once 保存しますか？ is answered (はい or いいえ):
@@ -1189,6 +1202,42 @@ export default function StatusMatcher() {
       return;
     }
 
+    // Target User by voice — checked before Target Field matching, so a short
+    // name after 利用者 (e.g. 「利用者 田中」) can't be mistaken for a field label.
+    const patientVoiceMatch = rawFinal.match(
+      /^(利用者|患者|patient|patid|pat_id)\s*[:：]?\s*(.+)$/i
+    );
+    const currentFocusField = fields.find((f) => f.field_key === focusKeyRef.current);
+    const isPatientSelectFieldFocused = currentFocusField?.field_label === PATIENT_SELECT_FIELD_LABEL;
+    // With no patient selected yet, nothing else can be answered, so any
+    // utterance that isn't a Target Field name is taken as a patient search —
+    // including kanji names (山田太郎), which is how the recognizer usually
+    // writes them. Once a patient is selected, a spoken pat_id (digits only)
+    // still switches patients, unless the focused field takes typed/dictated
+    // input (number or text), where digits are that field's answer.
+    const fieldSwitchTarget = bestFieldMatch(rawFinal, pickerFields.length ? (pickerFields as unknown as Field[]) : fields);
+    const impliedPatientShortcut = selectedPatientRef.current
+      ? isSpokenIdOnly(rawFinal) && currentFocusField?.field_type !== "number" && currentFocusField?.field_type !== "text"
+      : !fieldSwitchTarget || isLikelyPatientShortcut(rawFinal);
+    // Saying a field name while parked on 利用者選択 still jumps to that field.
+    if (patientVoiceMatch || impliedPatientShortcut || (isPatientSelectFieldFocused && !fieldSwitchTarget)) {
+      const patientText = patientVoiceMatch
+        ? patientVoiceMatch[2]?.trim() ?? ""
+        : rawFinal.trim();
+      if (!patientText) {
+        setStatusMsg("利用者を指定してください（例: やまだたろう / 12345）");
+        return;
+      }
+      // Only the "利用者選択" field wires the matched patient back into its own value.
+      patientFieldVoiceKeyRef.current = isPatientSelectFieldFocused ? focusKeyRef.current : null;
+      setIsSearching(true);
+      patientSelectSourceRef.current = "voice";
+      setPatientVoiceText(patientText);
+      setPatientVoiceRequestId((id) => id + 1);
+      setStatusMsg(`利用者検索: ${patientText}`);
+      return;
+    }
+
     // On a screen with Target Field entries (うけとり / 食べ残し / 体調), voice may
     // only switch between those entries — a spoken word that happens to name one
     // of the hidden report columns (メモ, 半分, 完食, …) must never become the
@@ -1230,37 +1279,14 @@ export default function StatusMatcher() {
       return;
     }
 
-    const patientVoiceMatch = rawFinal.match(
-      /^(利用者|患者|patient|patid|pat_id)\s*[:：]?\s*(.+)$/i
-    );
-    const currentFocusField = fields.find((f) => f.field_key === focusKeyRef.current);
-    const isPatientSelectFieldFocused = currentFocusField?.field_label === PATIENT_SELECT_FIELD_LABEL;
-    const impliedPatientShortcut = !selectedPatientRef.current && isLikelyPatientShortcut(rawFinal);
-    if (patientVoiceMatch || impliedPatientShortcut || isPatientSelectFieldFocused) {
-      const patientText = patientVoiceMatch
-        ? patientVoiceMatch[2]?.trim() ?? ""
-        : rawFinal.trim();
-      if (!patientText) {
-        setStatusMsg("利用者を指定してください（例: やまだたろう / 12345）");
-        return;
-      }
-      // Only the "利用者選択" field wires the matched patient back into its own value.
-      patientFieldVoiceKeyRef.current = isPatientSelectFieldFocused ? focusKeyRef.current : null;
-      setIsSearching(true);
-      patientSelectSourceRef.current = "voice";
-      setPatientVoiceText(patientText);
-      setPatientVoiceRequestId((id) => id + 1);
-      setStatusMsg(`利用者検索: ${patientText}`);
-      return;
-    }
-
     if (/^コメント/.test(rawFinal)) {
       const comment = rawFinal.replace(/^コメント[:：]?\s*/, "");
-      const currentKey = focusKeyRef.current;
-      const field = fields.find((f) => f.field_key === currentKey);
-      if (field) {
+      const group = GROUP_TARGET_FIELDS.find((g) => g.field_key === focusKeyRef.current);
+      const currentKey = group ? group.anchorKey : focusKeyRef.current;
+      const label = group ? group.field_label : fields.find((f) => f.field_key === currentKey)?.field_label;
+      if (label) {
         setValues((v) => ({ ...v, [currentKey]: { ...(v[currentKey] || {}), comment } }));
-        setStatusMsg(`${field.field_label} のコメントを追加しました`);
+        setStatusMsg(`${label} のコメントを追加しました`);
       }
       return;
     }
@@ -1365,6 +1391,8 @@ export default function StatusMatcher() {
                 <button
                   key={s.key}
                   type="button"
+                  // 月次報告 is hidden from view; its screen and logic are left as they are.
+                  hidden={s.key === "monthly_report"}
                   className={`btn btn-sm ${screenKey === s.key ? "btn-primary" : "btn-outline-primary"}`}
                   onClick={() => setScreenKey(s.key)}
                 >
@@ -1409,15 +1437,17 @@ export default function StatusMatcher() {
               <QrCodeScan size={14} />
               <span>QR読取</span>
             </button>
-            <button
-              type="button"
-              className="btn btn-sm btn-success ms-auto"
-              onClick={handleSaveRecord}
-              disabled={savingRecord}
-            >
-              {savingRecord && <Spinner key="saving-spinner" className="me-1" animation="border" size="sm" />}
-              <span>保存</span>
-            </button>
+            {allTargetFieldsAnswered && (
+              <button
+                type="button"
+                className="btn btn-success ms-auto px-4 fw-bold"
+                onClick={handleSaveRecord}
+                disabled={savingRecord}
+              >
+                {savingRecord && <Spinner key="saving-spinner" className="me-1" animation="border" size="sm" />}
+                <span>保存</span>
+              </button>
+            )}
           </div>
 
           {pendingDisplay.length > 0 && (
@@ -1473,6 +1503,11 @@ export default function StatusMatcher() {
         <PatientSelector
           externalVoiceText={patientVoiceText}
           externalVoiceRequestId={patientVoiceRequestId}
+          onManualSelect={(patient) => {
+            // Same as QR: re-picking the patient already selected doesn't
+            // change the selection, so don't leave a mark behind.
+            if (patient.id !== selectedPatientRef.current?.id) patientSelectSourceRef.current = "manual";
+          }}
           onExternalVoiceResult={({ matched, message, patient }) => {
             setIsSearching(false);
             // A voice search that found no one mustn't leave its "voice"
@@ -1495,6 +1530,10 @@ export default function StatusMatcher() {
           </p>
         ) : (
           <div style={{ marginTop: "0.5rem" }}>
+            {/* The 対象フィールド dropdown is hidden from view. The active Target
+                Field (focusKey) is still driven by the voice flow, taps and
+                spoken field names; its own question card is shown below. */}
+            <div hidden>
             <label>対象フィールド</label>
             <div className={styles.fieldDropdown} ref={fieldMenuRef}>
               <button
@@ -1525,6 +1564,7 @@ export default function StatusMatcher() {
                 </div>
               )}
             </div>
+            </div>
 
             {!isPatientSelectField && (
               <Fragment key={focusKey ?? "none"}>
@@ -1544,7 +1584,12 @@ export default function StatusMatcher() {
                               <button
                                 type="button"
                                 className="list-group-item list-group-item-action border-0 px-0 py-0 d-flex align-items-center bg-transparent"
-                                onClick={() => selectGroupOption(focusGroupField, o)}
+                                onClick={() => {
+                                  selectGroupOption(focusGroupField, o);
+                                  // A single-choice pick answers the field, so the
+                                  // auto-flow moves on just as for a spoken answer.
+                                  if (!focusGroupField.multiple && !o.next) advanceFlow(focusGroupField.field_key, valuesRef.current);
+                                }}
                               >
                                 <span
                                   className={`badge ${isSelected ? "bg-success" : "bg-light text-dark"} me-2 rounded-pill`}
@@ -1561,7 +1606,10 @@ export default function StatusMatcher() {
                                       key={n.label}
                                       type="button"
                                       className="list-group-item list-group-item-action border-0 ps-4 pe-0 py-0 d-flex align-items-center bg-transparent"
-                                      onClick={() => selectGroupOption(focusGroupField, n)}
+                                      onClick={() => {
+                                        selectGroupOption(focusGroupField, n);
+                                        if (!focusGroupField.multiple && !n.next) advanceFlow(focusGroupField.field_key, valuesRef.current);
+                                      }}
                                     >
                                       <span
                                         className={`badge ${isNextSelected ? "bg-success" : "bg-light text-dark"} me-2 rounded-pill`}
@@ -1630,11 +1678,8 @@ export default function StatusMatcher() {
                                 const key = focusField.field_key;
                                 setFieldValue(key, p);
                                 const snapshot = { ...valuesRef.current, [key]: { ...(valuesRef.current[key] || {}), value: p } };
-                                if (key === "uketori") {
-                                  autoSaveSelection(snapshot);
-                                } else {
-                                  advanceFlow(key, snapshot);
-                                }
+                                if (key === "uketori") autoSaveSelection(snapshot);
+                                advanceFlow(key, snapshot);
                               }}
                             >
                               <span
@@ -1670,78 +1715,41 @@ export default function StatusMatcher() {
                   </div>
                 )}
 
-                {focusField && (
-                  <div key={`comment-${focusField.field_key}`} className="mt-1">
-                    <label className="form-label fw-semibold text-muted text-uppercase small mb-1">
-                      コメント（自由入力）
-                    </label>
-                    <textarea
-                      className="form-control border-0 shadow-sm rounded-3"
-                      rows={1}
-                      placeholder="ここに意見や補足を入力できます（または「コメント〜」と話してください）"
-                      value={values[focusField.field_key]?.comment ?? ""}
-                      onChange={(e) => {
-                        const text = e.target.value;
-                        setValues((prev) => ({
-                          ...prev,
-                          [focusField.field_key]: { ...(prev[focusField.field_key] || {}), comment: text },
-                        }));
-                      }}
-                    />
-                  </div>
-                )}
               </Fragment>
             )}
 
-            {(() => {
-              const idx = pickerFields.findIndex((f) => f.field_key === focusKey);
-              if (idx === -1) return null;
-              const hasPrev = idx > 0;
-              const hasNext = idx < pickerFields.length - 1 || flowPhaseRef.current === "field";
-              // On the last 対象フィールド (体調) there's nowhere to go next, so 次へ
-              // is disabled once one of its options has been selected.
-              const isLast = idx === pickerFields.length - 1;
-              const lastAnswered =
-                isLast &&
-                (focusGroupField
-                  ? groupLeafOptions(focusGroupField.options).some((o) => isGroupOptionSelected(o, values))
-                  : !!values[focusKey]?.value);
-              return (
-                <div className={styles.targetNav}>
-                  <button
-                    type="button"
-                    className={`btn btn-outline-secondary ${styles.targetNavBtn} ${styles.targetNavBack}`}
-                    onClick={goToPrevTargetField}
-                    disabled={!hasPrev}
-                  >
-                    <ChevronLeft size={16} />
-                    戻る
-                  </button>
-                  <button
-                    type="button"
-                    className={`btn btn-primary ${styles.targetNavBtn} ${styles.targetNavNext}`}
-                    onClick={() => proceedToNextTargetField(focusKey)}
-                    disabled={!hasNext || lastAnswered}
-                  >
-                    次へ
-                    <ChevronRight size={16} />
-                  </button>
-                </div>
-              );
-            })()}
           </div>
         )}
       </div>
 
-      <div className={styles.transcriptBox}>
-        {transcript ? (
+      {selectedPatient && commentKey && !isPatientSelectField && (
+        <div key={`comment-${commentKey}`} className={styles.commentBox}>
+          <label htmlFor="target-field-comment" className={styles.commentLabel}>
+            <ChatLeftText size={16} />
+            コメント（自由入力）
+          </label>
+          <textarea
+            id="target-field-comment"
+            className={styles.commentInput}
+            rows={1}
+            placeholder="ここに意見や補足を入力できます"
+            value={values[commentKey]?.comment ?? ""}
+            onChange={(e) => {
+              const text = e.target.value;
+              setValues((prev) => ({
+                ...prev,
+                [commentKey]: { ...(prev[commentKey] || {}), comment: text },
+              }));
+            }}
+          />
+        </div>
+      )}
+
+      {transcript && (
+        <div className={styles.transcriptBox}>
           <p>{transcript}</p>
-        ) : (
-          <p className={styles.placeholder}>
-            マイクで話してください…（例：「完食」「よし」「コメント〜」「今日」「8月6日」「保存」「やまだたろう」「12345」「写真をアップロード」）
-          </p>
-        )}
-      </div>
+        </div>
+      )}
       {statusMsg && (
         <div
           className={`alert ${
@@ -1772,23 +1780,12 @@ export default function StatusMatcher() {
         >
           {isListening ? <StopFill size={22} /> : <MicFill size={22} />}
         </button>
-        <p className={styles.statusText}>
-          {isSearching
-            ? "検索中…"
-            : isListening
-            ? "リスニング中…（連続で話してOK。「保存」で終了）"
-            : "マイクボタンで開始、または手入力してください"}
-        </p>
+        {isSearching && <p className={styles.statusText}>検索中…</p>}
       </div>
 
       {selectedPatient && matchStatus === "match" && (
         <div className="alert alert-success rounded-4 shadow-sm border-0 text-center">
           🎯 候補 {matches.length} 件の中から最適なものを選択しました
-        </div>
-      )}
-      {selectedPatient && matchStatus === "no-match" && (
-        <div className="alert alert-warning rounded-4 shadow-sm border-0 text-center">
-          🤔 フレーズ候補に該当するものがありませんでした
         </div>
       )}
 
