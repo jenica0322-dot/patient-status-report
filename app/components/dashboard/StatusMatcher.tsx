@@ -396,6 +396,10 @@ export default function StatusMatcher() {
   // Selected but not yet uploaded — local object URLs only, discarded unless 保存 is pressed.
   const [pendingPhotos, setPendingPhotos] = useState<{ id: number; file: File; url: string }[]>([]);
   const [savingRecord, setSavingRecord] = useState(false);
+  // Synchronous in-flight guard: the state above only updates on the next
+  // render, so a fast double-click or a spoken "保存" during a save would
+  // otherwise slip through and submit twice.
+  const savingRecordRef = useRef(false);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [qrOpen, setQrOpen] = useState(false);
@@ -977,6 +981,21 @@ export default function StatusMatcher() {
     focusKeyRef.current = next.field_key;
   };
 
+  // 戻る / 次へ buttons: step focus to the previous/next Target Field entry.
+  // Inside the auto-flow this goes through goToField so the question is
+  // asked by voice as usual; otherwise it only moves focus.
+  const stepTargetField = (delta: -1 | 1) => {
+    const idx = pickerFields.findIndex((f) => f.field_key === focusKey);
+    const target = idx === -1 ? undefined : pickerFields[idx + delta];
+    if (!target) return;
+    if (flowPhaseRef.current === "field") {
+      goToField(target);
+      return;
+    }
+    setFocusKey(target.field_key);
+    focusKeyRef.current = target.field_key;
+  };
+
   // Ends the voice-question flow once 保存しますか？ is answered (はい or いいえ):
   // stops the mic right away and keeps anything still in flight — pending TTS,
   // or a trailing result from the session being stopped — from asking again
@@ -1329,6 +1348,7 @@ export default function StatusMatcher() {
   };
 
   const handleSaveRecord = async () => {
+    if (savingRecordRef.current) return;
     const patient = selectedPatientRef.current;
     if (!patient) {
       setStatusMsg("❌ 利用者が選択されていません");
@@ -1347,6 +1367,7 @@ export default function StatusMatcher() {
         ? { ...valuesRef.current, delivery_person: { value: user?.username || "" } }
         : valuesRef.current;
 
+    savingRecordRef.current = true;
     setSavingRecord(true);
     try {
       await saveStatusRecord({ ...baseParams, values: payloadValues });
@@ -1377,6 +1398,7 @@ export default function StatusMatcher() {
       const detail = e instanceof Error ? e.message : "";
       setStatusMsg(detail ? `❌ 保存に失敗しました（${detail}）` : "❌ 保存に失敗しました");
     } finally {
+      savingRecordRef.current = false;
       setSavingRecord(false);
     }
   };
@@ -1444,9 +1466,10 @@ export default function StatusMatcher() {
                 className={`btn btn-success ms-auto px-4 fw-bold ${styles.toolbarBtn}`}
                 onClick={handleSaveRecord}
                 disabled={savingRecord}
+                aria-busy={savingRecord}
               >
                 {savingRecord && <Spinner key="saving-spinner" className="me-1" animation="border" size="sm" />}
-                <span>保存</span>
+                <span>{savingRecord ? "保存中…" : "保存"}</span>
               </button>
             )}
           </div>
@@ -1706,6 +1729,31 @@ export default function StatusMatcher() {
                     />
                   </div>
                 )}
+
+                {(() => {
+                  const idx = pickerFields.findIndex((f) => f.field_key === focusKey);
+                  if (idx === -1) return null;
+                  return (
+                    <div className={styles.fieldNav}>
+                      <button
+                        type="button"
+                        className={`btn btn-outline-primary ${styles.fieldNavBtn}`}
+                        disabled={idx === 0}
+                        onClick={() => stepTargetField(-1)}
+                      >
+                        戻る
+                      </button>
+                      <button
+                        type="button"
+                        className={`btn btn-outline-primary ${styles.fieldNavBtn}`}
+                        disabled={idx === pickerFields.length - 1}
+                        onClick={() => stepTargetField(1)}
+                      >
+                        次へ
+                      </button>
+                    </div>
+                  );
+                })()}
 
               </Fragment>
             )}

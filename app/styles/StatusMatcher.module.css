@@ -272,6 +272,22 @@
   line-height: 1.2;
 }
 
+/* 戻る / 次へ — steps between Target Fields, below the candidate list */
+.fieldNav {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+  padding: 0 0.25rem;
+}
+
+.fieldNavBtn.fieldNavBtn {
+  min-width: 7.5rem;
+  font-size: 18px;
+  font-weight: 700;
+  border-radius: 8px;
+}
+
 /* コメント（自由入力） — its own card below the Target Field panel */
 .commentBox {
   background: var(--primary-bg);
