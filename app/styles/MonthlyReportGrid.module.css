@@ -47,6 +47,42 @@
   background: #e9e9e9;
 }
 
+/* Comment columns (うけとり / 食べ残し / 体調) in the daily grid */
+.grid th.colCommentHead {
+  min-width: 96px;
+}
+
+.grid td.colComment {
+  min-width: 96px;
+  max-width: 180px;
+  white-space: pre-wrap;
+}
+
+/* Comment indicator — two short red strokes in the cell's top-right corner */
+.grid td.hasComment {
+  position: relative;
+}
+
+.grid td.hasComment::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 18px;
+  height: 18px;
+  background: linear-gradient(
+    45deg,
+    transparent 44%,
+    #e11d1d 44% 57%,
+    transparent 57% 68%,
+    #e11d1d 68% 81%,
+    transparent 81%
+  );
+  pointer-events: none;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
 .colMeal {
   background: #fbe0cf;
 }
