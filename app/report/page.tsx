@@ -2,7 +2,7 @@
 
 "use client";
 
-import { useEffect, useState, useMemo, Fragment, type CSSProperties } from "react";
+import { useEffect, useState, useMemo, Fragment } from "react";
 import { Container, Row, Col, Card, Form, Spinner, Alert, Button, Modal } from "react-bootstrap";
 import { FileText, Calendar, FileEarmarkExcel, FileEarmarkPdf, Images, Trash } from "react-bootstrap-icons";
 import Link from "next/link";
@@ -58,6 +58,17 @@ function Checklist({ field, value }: { field: ReportField | undefined; value: an
           {o.label}
         </span>
       ))}
+    </span>
+  );
+}
+
+// A daily comment cell's text. On laptop screens it stays on one line and is
+// cut off with "…" (full text on hover) so a long comment can't widen the grid.
+function CommentText({ text }: { text: string }) {
+  if (!text) return null;
+  return (
+    <span className={styles.commentText} title={text}>
+      {text}
     </span>
   );
 }
@@ -260,19 +271,6 @@ export default function ReportPage() {
   // below derive their trailing spans from this so they stay aligned if a field
   // is added or removed in registerfield.
   const totalCols = 5 + orderedDailyBody.length + commentColCount;
-
-  // Relative column widths for the fixed-layout grid, in the same order as the
-  // daily header row, so on laptop screens the whole report fits the width
-  // without horizontal scrolling. Checkbox columns stay narrow; text/comment ones get more.
-  const colWeights = useMemo(() => {
-    const w: number[] = [2, 2, 5, 4, 4, 7]; // 日/曜/配食者名/利用者確認印/受取/受取コメント
-    orderedDailyBody.forEach((f) => {
-      w.push(f.field_type === "checkbox" ? 4 : 6);
-      if (groupCommentAfter.has(f.field_key)) w.push(7);
-    });
-    return w;
-  }, [orderedDailyBody, groupCommentAfter]);
-  const colWeightTotal = colWeights.reduce((a, b) => a + b, 0);
   const commentColSpan = totalCols - 8; // 分類(2) + 確認項目(4) + 件数(2)
   const footerShareColSpan = totalCols - 14; // 報告日(2+4) + 確認者(2+3) + label(3)
 
@@ -385,12 +383,6 @@ export default function ReportPage() {
               <p className={styles.scrollHint}>← 横にスクロールできます →</p>
               <div className={styles.gridScroll}>
                 <table className={styles.grid}>
-                {/* Widths only take effect on laptop screens (see .grid col in the CSS). */}
-                <colgroup>
-                  {colWeights.map((w, i) => (
-                    <col key={i} style={{ "--col-w": `${(w / colWeightTotal) * 100}%` } as CSSProperties} />
-                  ))}
-                </colgroup>
                 <tbody>
                   {/* Header block */}
                   <tr>
@@ -493,7 +485,9 @@ export default function ReportPage() {
                           {photoDateSet.has(iso) && <span className={styles.kakuninMark}>○</span>}
                         </td>
                         <td className={styles.colUketori}>{String(rawValue(values.uketori))}</td>
-                        <td className={`${styles.colUketori} ${styles.colComment}`}>{rawComment(values.uketori)}</td>
+                        <td className={`${styles.colUketori} ${styles.colComment}`}>
+                          <CommentText text={rawComment(values.uketori)} />
+                        </td>
                         {orderedDailyBody.map((f) => {
                           const after = groupCommentAfter.get(f.field_key);
                           return (
@@ -511,7 +505,7 @@ export default function ReportPage() {
                               </td>
                               {after && (
                                 <td className={`${groupColClass(styles, after.group)} ${styles.colComment}`}>
-                                  {rawComment(values[after.commentKey])}
+                                  <CommentText text={rawComment(values[after.commentKey])} />
                                 </td>
                               )}
                             </Fragment>

@@ -169,40 +169,45 @@
   }
 }
 
-/* Laptop/desktop only: fit the whole grid to the available width so it never
-   scrolls sideways. Fixed layout at 100% width, with column proportions from
-   the <colgroup> in page.tsx (each <col> carries --col-w); text wraps inside
-   its cell instead of widening the table. Smaller screens keep the scrollable
-   layout above unchanged. */
+/* Laptop/desktop only: the grid spans the available width, and every header,
+   label, option and value stays on one straight line. Columns size to their
+   one-line text (auto layout) and share any leftover width. Daily comment
+   cells are capped and cut off with "…" (full text on hover) so a long
+   comment can't stretch the grid. The free-text 月次 blocks (monthly comment
+   blocks, 総評) keep their own line breaks. Smaller screens keep the
+   scrollable layout above unchanged. */
 @media (min-width: 992px) {
   .grid {
     width: 100%;
     min-width: 0;
-    max-width: 100%;
-    table-layout: fixed;
+    table-layout: auto;
     font-size: clamp(0.62rem, 0.72vw, 0.78rem);
     line-height: 1.3;
-  }
-
-  .grid col {
-    width: var(--col-w);
   }
 
   .grid th,
   .grid td {
     padding: 3px 4px;
-    overflow-wrap: anywhere;
+    white-space: nowrap;
+    overflow-wrap: normal;
   }
 
-  .labelCell,
-  .headerRow th {
-    white-space: normal;
+  .grid td.commentCell {
+    white-space: pre-line;
   }
 
   .grid th.colCommentHead,
   .grid td.colComment {
     min-width: 0;
     max-width: none;
+  }
+
+  .commentText {
+    display: block;
+    max-width: 10em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .sectionBar {
@@ -212,14 +217,6 @@
 
   .kakuninMark {
     font-size: 1.1rem;
-  }
-
-  .checklistOption {
-    display: inline-block;
-    max-width: 100%;
-    margin-right: 8px;
-    white-space: normal;
-    overflow-wrap: anywhere;
   }
 
   .gridScroll {
