@@ -28,6 +28,7 @@ import {
   CIRCLED_NUMBERS,
   isChecked,
   textWithComment,
+  rawValue,
   checklistOptions,
   buildCommentBlocks,
   buildCommentRowPlan,
@@ -444,7 +445,7 @@ export default function ReportPage() {
                         <td className={styles.colKakuninin}>
                           {photoDateSet.has(iso) && <span className={styles.kakuninMark}>○</span>}
                         </td>
-                        <td className={styles.colUketori}>{textWithComment(values.uketori)}</td>
+                        <td className={styles.colUketori}>{String(rawValue(values.uketori))}</td>
                         {orderedDailyBody.map((f) => (
                           <td key={f.field_key} className={groupColClass(styles, FIELD_GROUP[f.field_key])}>
                             {f.field_type === "checkbox" ? (

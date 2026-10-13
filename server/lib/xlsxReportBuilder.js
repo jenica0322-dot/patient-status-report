@@ -190,7 +190,7 @@ async function buildReportWorkbook({ data, dailyFields, monthlyFields }) {
     styleCell(kakuninCell, { fill: GRAY, size: 9 });
 
     const uketoriCell = ws.getCell(row, 5);
-    uketoriCell.value = textWithComment(values.uketori);
+    uketoriCell.value = rawValue(values.uketori) || "";
     styleCell(uketoriCell, { fill: GRAY, size: 9, align: "left" });
 
     orderedDailyBody.forEach((f, idx) => {

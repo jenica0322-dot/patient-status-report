@@ -295,7 +295,7 @@ function buildDailyGridTable({ data, dailyFields, monthlyFields }) {
     // Every free-text cell below is noWrap + truncated to its own column width so a
     // long dictated note can never grow this row taller than its neighbors — see
     // truncateForWidth's comment for why that matters here.
-    setCell(row, 5, truncateForWidth(textWithComment(values.uketori), colWidths[4], DAY_ROW_FONT_SIZE), {
+    setCell(row, 5, truncateForWidth(String(rawValue(values.uketori) || ""), colWidths[4], DAY_ROW_FONT_SIZE), {
       fill: COLORS.GRAY,
       size: DAY_ROW_FONT_SIZE,
       align: "left",
