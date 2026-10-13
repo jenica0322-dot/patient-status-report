@@ -2,7 +2,7 @@
 
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, Fragment } from "react";
 import { Container, Row, Col, Card, Form, Spinner, Alert, Button, Modal } from "react-bootstrap";
 import { FileText, Calendar, FileEarmarkExcel, FileEarmarkPdf, Images, Trash } from "react-bootstrap-icons";
 import Link from "next/link";
@@ -29,6 +29,7 @@ import {
   isChecked,
   textWithComment,
   rawValue,
+  rawComment,
   checklistOptions,
   buildCommentBlocks,
   buildCommentRowPlan,
@@ -201,11 +202,31 @@ export default function ReportPage() {
           (f) =>
             f.field_key !== "youbi" &&
             f.field_key !== "uketori" &&
+            // メモ isn't shown in the report grid (its data stays in the record).
+            f.field_key !== "memo" &&
             f.field_label !== PATIENT_SELECT_FIELD_LABEL
         )
         .sort((a, b) => a.order_index - b.order_index),
     [dailyFields]
   );
+  // Comment columns in the daily grid. A Status Input comment is stored on the
+  // field it was typed for — group pickers (食べ残し/体調) keep theirs on their
+  // anchor field — so each column reads that key's comment. うけとり's sits right
+  // after the うけとり column; the group ones after the group's last column.
+  const groupCommentAfter = useMemo(() => {
+    const groups = [
+      { group: "食事", commentKey: "kanshoku", label: "食べ残しコメント" },
+      { group: "体調", commentKey: "shokuyoku_teika", label: "体調コメント" },
+    ];
+    const m = new Map<string, { commentKey: string; label: string; group: string }>();
+    groups.forEach((g) => {
+      const last = [...orderedDailyBody].reverse().find((f) => FIELD_GROUP[f.field_key] === g.group);
+      if (last) m.set(last.field_key, g);
+    });
+    return m;
+  }, [orderedDailyBody]);
+  const commentColCount = 1 + groupCommentAfter.size;
+
   const commentBlocks = useMemo(() => buildCommentBlocks(monthlyFields), [monthlyFields]);
   const tallyRowKeys = useMemo(
     () => Object.entries(TALLY_GROUPS).flatMap(([group, keys]) => keys.map((k) => [group, k])),
@@ -232,13 +253,13 @@ export default function ReportPage() {
 
   const [y, m] = yearMonth.split("-");
 
-  // 日/曜/配食者名/利用者確認印/受取 + one column per daily field. 配食者名 and
-  // 利用者確認印 are print-only columns for handwritten fill-in — not backed by a
-  // status_fields row, so they never show up in the Status Input 対象フィールド
-  // picker. The header-block rows above the grid are hand-tuned to this specific
-  // 19-column template (16 daily_status fields); the sections below derive their
-  // spans from it so they stay aligned if a field is added or removed in registerfield.
-  const totalCols = 5 + orderedDailyBody.length;
+  // 日/曜/配食者名/利用者確認印/受取 + one column per daily field + the comment
+  // columns. 配食者名 and 利用者確認印 are print-only columns for handwritten
+  // fill-in — not backed by a status_fields row, so they never show up in the
+  // Status Input 対象フィールド picker. The header-block rows and the sections
+  // below derive their trailing spans from this so they stay aligned if a field
+  // is added or removed in registerfield.
+  const totalCols = 5 + orderedDailyBody.length + commentColCount;
   const commentColSpan = totalCols - 8; // 分類(2) + 確認項目(4) + 件数(2)
   const footerShareColSpan = totalCols - 14; // 報告日(2+4) + 確認者(2+3) + label(3)
 
@@ -363,7 +384,7 @@ export default function ReportPage() {
                     <td className={styles.labelCell} colSpan={2}>
                       記録月
                     </td>
-                    <td className={styles.valueCell} colSpan={10}>
+                    <td className={styles.valueCell} colSpan={totalCols - 9}>
                       {Number(y)}年　{Number(m)}月
                     </td>
                   </tr>
@@ -377,7 +398,7 @@ export default function ReportPage() {
                     <td className={styles.labelCell} colSpan={2}>
                       食事内容
                     </td>
-                    <td className={styles.valueCell} colSpan={10}>
+                    <td className={styles.valueCell} colSpan={totalCols - 9}>
                       <Checklist field={mfByKey.shokuji_naiyo} value={monthlyValues.shokuji_naiyo} />
                     </td>
                   </tr>
@@ -391,7 +412,7 @@ export default function ReportPage() {
                     <td className={styles.labelCell} colSpan={2}>
                       連絡方法
                     </td>
-                    <td className={styles.valueCell} colSpan={10}>
+                    <td className={styles.valueCell} colSpan={totalCols - 9}>
                       <Checklist field={mfByKey.renraku_hoho} value={monthlyValues.renraku_hoho} />
                     </td>
                   </tr>
@@ -411,7 +432,7 @@ export default function ReportPage() {
                     <td className={styles.labelCell} colSpan={2}>
                       記入者
                     </td>
-                    <td className={styles.valueCell} colSpan={7}>
+                    <td className={styles.valueCell} colSpan={totalCols - 12}>
                       {textWithComment(monthlyValues.kinyusha)}
                     </td>
                   </tr>
@@ -425,9 +446,16 @@ export default function ReportPage() {
                     <th style={{ width: 72 }}>配食者名</th>
                     <th style={{ width: 72 }}>利用者確認印</th>
                     <th style={{ width: 64 }}>{dfByKey.uketori?.field_label || "受取"}</th>
-                    {orderedDailyBody.map((f) => (
-                      <th key={f.field_key}>{f.field_label}</th>
-                    ))}
+                    <th className={styles.colCommentHead}>{dfByKey.uketori?.field_label || "受取"}コメント</th>
+                    {orderedDailyBody.map((f) => {
+                      const after = groupCommentAfter.get(f.field_key);
+                      return (
+                        <Fragment key={f.field_key}>
+                          <th>{f.field_label}</th>
+                          {after && <th className={styles.colCommentHead}>{after.label}</th>}
+                        </Fragment>
+                      );
+                    })}
                   </tr>
 
                   {/* Daily grid rows — always shows every day of the month, like the paper template */}
@@ -435,30 +463,46 @@ export default function ReportPage() {
                     const iso = `${yearMonth}-${String(day).padStart(2, "0")}`;
                     const dayRow = dayRowByDate.get(iso);
                     const values = dayRow?.values || {};
+                    // Red corner mark on any cell whose field carries a (non-blank) comment.
+                    const commentClass = (key: string) =>
+                      rawComment(values[key]).trim() ? ` ${styles.hasComment}` : "";
                     const weekday =
                       values.youbi?.value ?? values.youbi ?? WEEKDAY_JA[new Date(`${iso}T00:00:00`).getDay()];
                     return (
                       <tr key={iso}>
                         <td className={styles.colDay}>{day}</td>
                         <td className={styles.colWeekday}>{weekday}</td>
-                        <td className={styles.colHaitatsusha}>{textWithComment(values.delivery_person)}</td>
+                        <td className={`${styles.colHaitatsusha}${commentClass("delivery_person")}`}>{textWithComment(values.delivery_person)}</td>
                         <td className={styles.colKakuninin}>
                           {photoDateSet.has(iso) && <span className={styles.kakuninMark}>○</span>}
                         </td>
-                        <td className={styles.colUketori}>{String(rawValue(values.uketori))}</td>
-                        {orderedDailyBody.map((f) => (
-                          <td key={f.field_key} className={groupColClass(styles, FIELD_GROUP[f.field_key])}>
-                            {f.field_type === "checkbox" ? (
-                              isChecked(values[f.field_key]) ? (
-                                <span className={styles.checkMark}>✓</span>
-                              ) : (
-                                ""
-                              )
-                            ) : (
-                              textWithComment(values[f.field_key])
-                            )}
-                          </td>
-                        ))}
+                        <td className={`${styles.colUketori}${commentClass("uketori")}`}>{String(rawValue(values.uketori))}</td>
+                        <td className={`${styles.colUketori} ${styles.colComment}`}>{rawComment(values.uketori)}</td>
+                        {orderedDailyBody.map((f) => {
+                          const after = groupCommentAfter.get(f.field_key);
+                          return (
+                            <Fragment key={f.field_key}>
+                              <td
+                                className={`${groupColClass(styles, FIELD_GROUP[f.field_key])}${commentClass(f.field_key)}`}
+                              >
+                                {f.field_type === "checkbox" ? (
+                                  isChecked(values[f.field_key]) ? (
+                                    <span className={styles.checkMark}>✓</span>
+                                  ) : (
+                                    ""
+                                  )
+                                ) : (
+                                  textWithComment(values[f.field_key])
+                                )}
+                              </td>
+                              {after && (
+                                <td className={`${groupColClass(styles, after.group)} ${styles.colComment}`}>
+                                  {rawComment(values[after.commentKey])}
+                                </td>
+                              )}
+                            </Fragment>
+                          );
+                        })}
                       </tr>
                     );
                   })}
