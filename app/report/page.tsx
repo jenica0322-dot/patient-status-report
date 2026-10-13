@@ -2,7 +2,7 @@
 
 "use client";
 
-import { useEffect, useState, useMemo, Fragment } from "react";
+import { useEffect, useState, useMemo, Fragment, type CSSProperties } from "react";
 import { Container, Row, Col, Card, Form, Spinner, Alert, Button, Modal } from "react-bootstrap";
 import { FileText, Calendar, FileEarmarkExcel, FileEarmarkPdf, Images, Trash } from "react-bootstrap-icons";
 import Link from "next/link";
@@ -260,6 +260,19 @@ export default function ReportPage() {
   // below derive their trailing spans from this so they stay aligned if a field
   // is added or removed in registerfield.
   const totalCols = 5 + orderedDailyBody.length + commentColCount;
+
+  // Relative column widths for the fixed-layout grid, in the same order as the
+  // daily header row, so on laptop screens the whole report fits the width
+  // without horizontal scrolling. Checkbox columns stay narrow; text/comment ones get more.
+  const colWeights = useMemo(() => {
+    const w: number[] = [2, 2, 5, 4, 4, 7]; // 日/曜/配食者名/利用者確認印/受取/受取コメント
+    orderedDailyBody.forEach((f) => {
+      w.push(f.field_type === "checkbox" ? 4 : 6);
+      if (groupCommentAfter.has(f.field_key)) w.push(7);
+    });
+    return w;
+  }, [orderedDailyBody, groupCommentAfter]);
+  const colWeightTotal = colWeights.reduce((a, b) => a + b, 0);
   const commentColSpan = totalCols - 8; // 分類(2) + 確認項目(4) + 件数(2)
   const footerShareColSpan = totalCols - 14; // 報告日(2+4) + 確認者(2+3) + label(3)
 
@@ -368,10 +381,16 @@ export default function ReportPage() {
 
         {!loading && report && (
           <Card className="mb-4">
-            <Card.Body>
+            <Card.Body className={styles.reportBody}>
               <p className={styles.scrollHint}>← 横にスクロールできます →</p>
               <div className={styles.gridScroll}>
                 <table className={styles.grid}>
+                {/* Widths only take effect on laptop screens (see .grid col in the CSS). */}
+                <colgroup>
+                  {colWeights.map((w, i) => (
+                    <col key={i} style={{ "--col-w": `${(w / colWeightTotal) * 100}%` } as CSSProperties} />
+                  ))}
+                </colgroup>
                 <tbody>
                   {/* Header block */}
                   <tr>
@@ -463,28 +482,23 @@ export default function ReportPage() {
                     const iso = `${yearMonth}-${String(day).padStart(2, "0")}`;
                     const dayRow = dayRowByDate.get(iso);
                     const values = dayRow?.values || {};
-                    // Red corner mark on any cell whose field carries a (non-blank) comment.
-                    const commentClass = (key: string) =>
-                      rawComment(values[key]).trim() ? ` ${styles.hasComment}` : "";
                     const weekday =
                       values.youbi?.value ?? values.youbi ?? WEEKDAY_JA[new Date(`${iso}T00:00:00`).getDay()];
                     return (
                       <tr key={iso}>
                         <td className={styles.colDay}>{day}</td>
                         <td className={styles.colWeekday}>{weekday}</td>
-                        <td className={`${styles.colHaitatsusha}${commentClass("delivery_person")}`}>{textWithComment(values.delivery_person)}</td>
+                        <td className={styles.colHaitatsusha}>{textWithComment(values.delivery_person)}</td>
                         <td className={styles.colKakuninin}>
                           {photoDateSet.has(iso) && <span className={styles.kakuninMark}>○</span>}
                         </td>
-                        <td className={`${styles.colUketori}${commentClass("uketori")}`}>{String(rawValue(values.uketori))}</td>
+                        <td className={styles.colUketori}>{String(rawValue(values.uketori))}</td>
                         <td className={`${styles.colUketori} ${styles.colComment}`}>{rawComment(values.uketori)}</td>
                         {orderedDailyBody.map((f) => {
                           const after = groupCommentAfter.get(f.field_key);
                           return (
                             <Fragment key={f.field_key}>
-                              <td
-                                className={`${groupColClass(styles, FIELD_GROUP[f.field_key])}${commentClass(f.field_key)}`}
-                              >
+                              <td className={groupColClass(styles, FIELD_GROUP[f.field_key])}>
                                 {f.field_type === "checkbox" ? (
                                   isChecked(values[f.field_key]) ? (
                                     <span className={styles.checkMark}>✓</span>
