@@ -4,7 +4,6 @@
 // numbered report-comment blocks -> 総評 -> footer.
 const ExcelJS = require("exceljs");
 const {
-  TOTAL_COLS,
   PATIENT_SELECT_FIELD_LABEL,
   COLORS,
   GROUP_COLOR: GROUP_COLOR_RGB,
@@ -43,6 +42,62 @@ function styleCell(cell, { bold, size, color, fill, align, valign, wrap, border 
   }
 }
 
+// Daily grid comment columns sit right after the column they belong to, as in the
+// on-screen report: うけとり's after うけとり, and the 食べ残し/体調 group comments
+// (stored on the group's anchor field) after the group's last column.
+const GROUP_COMMENT_COLUMNS = [
+  { group: "食事", commentKey: "kanshoku", label: "食べ残しコメント" },
+  { group: "体調", commentKey: "shokuyoku_teika", label: "体調コメント" },
+];
+
+// Rough one-line width of `text` in ems: full-width (CJK) characters ~1em,
+// ASCII/half-width ones ~0.55em.
+function textEms(text) {
+  let ems = 0;
+  for (const ch of String(text || "")) ems += ch.charCodeAt(0) < 0x2000 ? 0.55 : 1;
+  return ems;
+}
+
+// Minimum column widths (Excel width units) for columns whose values can be longer
+// than their header. 日/曜 are wider than their one-character headers need because
+// the 利用者名/配送担当/利用回数/報告先/分類 labels are merged across those two columns.
+const MIN_COL_WIDTH = { day: 4.8, delivery: 10, uketori: 7, text: 9, comment: 13, checkbox: 4.5, fixed: 4.5 };
+const HEADER_FONT_SIZE = 9;
+
+// Builds the daily grid's column list (header label + kind per column).
+function buildDailyColumns(dfByKey, orderedDailyBody) {
+  const uketoriLabel = dfByKey.uketori?.field_label || "受取";
+  const cols = [
+    { label: "日", kind: "day" },
+    { label: dfByKey.youbi?.field_label || "曜", kind: "day" },
+    { label: "配食者名", kind: "delivery" },
+    { label: "利用者確認印", kind: "fixed" },
+    { label: uketoriLabel, kind: "uketori" },
+    { label: `${uketoriLabel}コメント`, kind: "comment", commentKey: "uketori", fill: GRAY },
+  ];
+  const lastOfGroup = new Map();
+  orderedDailyBody.forEach((f) => {
+    if (FIELD_GROUP[f.field_key]) lastOfGroup.set(FIELD_GROUP[f.field_key], f.field_key);
+  });
+  orderedDailyBody.forEach((f) => {
+    cols.push({ label: f.field_label, kind: f.field_type === "checkbox" ? "checkbox" : "text", field: f });
+    const gc = GROUP_COMMENT_COLUMNS.find((g) => lastOfGroup.get(g.group) === f.field_key);
+    if (gc) cols.push({ label: gc.label, kind: "comment", commentKey: gc.commentKey, fill: GROUP_COLOR[gc.group] });
+  });
+  return cols;
+}
+
+// Width that fits the column's header on one line (a full-width character at the
+// header's 9pt is ~1.8 width units), or the per-kind minimum, whichever is larger.
+function columnWidth(col) {
+  const headerFit = textEms(col.label) * 1.8 + 1.2;
+  let w = Math.max(headerFit, MIN_COL_WIDTH[col.kind] || 4.5);
+  w = Math.round(w * 10) / 10;
+  // ExcelJS treats width===9 as its internal "unset" default and silently drops
+  // such columns from the file, so avoid that exact value.
+  return w === 9 ? 9.1 : w;
+}
+
 function mergeAndStyle(ws, r1, c1, r2, c2, value, opts) {
   ws.mergeCells(r1, c1, r2, c2);
   const cell = ws.getCell(r1, c1);
@@ -68,12 +123,6 @@ async function buildReportWorkbook({ data, dailyFields, monthlyFields }) {
     views: [{ showGridLines: false }],
   });
 
-  // All 17 columns share one equal width so the grid reads as a uniform table
-  // (cells with longer text just wrap within the row instead of overflowing).
-  // Note: ExcelJS treats width===9 as its internal "unset" default and silently
-  // drops such columns from the file, so avoid that exact value here.
-  for (let idx = 0; idx < TOTAL_COLS; idx++) ws.getColumn(idx + 1).width = 9.5;
-
   const monthlyValues = data.monthlyReport || {};
   const mfByKey = Object.fromEntries(monthlyFields.map((f) => [f.field_key, f]));
   const dfByKey = Object.fromEntries(dailyFields.map((f) => [f.field_key, f]));
@@ -82,21 +131,33 @@ async function buildReportWorkbook({ data, dailyFields, monthlyFields }) {
       (f) =>
         f.field_key !== "youbi" &&
         f.field_key !== "uketori" &&
+        // メモ isn't shown in the report grid (its data stays in the record).
+        f.field_key !== "memo" &&
         f.field_label !== PATIENT_SELECT_FIELD_LABEL
     )
     .sort((a, b) => a.order_index - b.order_index);
+
+  // The daily grid's columns set the sheet's column count and widths. Each column
+  // is sized so its header fits on one line; the header block and daily grid are
+  // single-line (no wrapping) throughout. The monthly section below reuses the
+  // same columns and spans the full width.
+  const columns = buildDailyColumns(dfByKey, orderedDailyBody);
+  const COLS = columns.length;
+  columns.forEach((c, idx) => {
+    ws.getColumn(idx + 1).width = columnWidth(c);
+  });
 
   let row = 1;
 
   // ---- Header block: 利用者名/記録月, 配送担当/食事内容, 利用回数/連絡方法, 報告先/先方担当者/記入者 ----
   const [y, m] = data.yearMonth.split("-");
-  mergeAndStyle(ws, row, 1, row, 2, "利用者名", { bold: true, fill: NAVY, color: WHITE });
-  mergeAndStyle(ws, row, 3, row, 7, data.patient.name || "", { align: "left" });
-  mergeAndStyle(ws, row, 8, row, 9, "記録月", { bold: true, fill: NAVY, color: WHITE });
-  mergeAndStyle(ws, row, 10, row, TOTAL_COLS, `${Number(y)}年　${Number(m)}月`, { align: "left" });
+  mergeAndStyle(ws, row, 1, row, 2, "利用者名", { bold: true, fill: NAVY, color: WHITE, wrap: false });
+  mergeAndStyle(ws, row, 3, row, 7, data.patient.name || "", { align: "left", wrap: false });
+  mergeAndStyle(ws, row, 8, row, 9, "記録月", { bold: true, fill: NAVY, color: WHITE, wrap: false });
+  mergeAndStyle(ws, row, 10, row, COLS, `${Number(y)}年　${Number(m)}月`, { align: "left", wrap: false });
   row++;
 
-  mergeAndStyle(ws, row, 1, row, 2, "配送担当", { bold: true, fill: NAVY, color: WHITE });
+  mergeAndStyle(ws, row, 1, row, 2, "配送担当", { bold: true, fill: NAVY, color: WHITE, wrap: false });
   mergeAndStyle(
     ws,
     row,
@@ -104,40 +165,40 @@ async function buildReportWorkbook({ data, dailyFields, monthlyFields }) {
     row,
     7,
     mfByKey.hasso_tanto ? checklistText(mfByKey.hasso_tanto, monthlyValues.hasso_tanto) : "",
-    { align: "left" }
+    { align: "left", wrap: false }
   );
-  mergeAndStyle(ws, row, 8, row, 9, "食事内容", { bold: true, fill: NAVY, color: WHITE });
+  mergeAndStyle(ws, row, 8, row, 9, "食事内容", { bold: true, fill: NAVY, color: WHITE, wrap: false });
   mergeAndStyle(
     ws,
     row,
     10,
     row,
-    TOTAL_COLS,
+    COLS,
     mfByKey.shokuji_naiyo ? checklistText(mfByKey.shokuji_naiyo, monthlyValues.shokuji_naiyo) : "",
-    { align: "left" }
+    { align: "left", wrap: false }
   );
   row++;
 
-  mergeAndStyle(ws, row, 1, row, 2, "利用回数", { bold: true, fill: NAVY, color: WHITE });
-  mergeAndStyle(ws, row, 3, row, 7, textWithComment(monthlyValues.riyo_kaisu), { align: "left" });
-  mergeAndStyle(ws, row, 8, row, 9, "連絡方法", { bold: true, fill: NAVY, color: WHITE });
+  mergeAndStyle(ws, row, 1, row, 2, "利用回数", { bold: true, fill: NAVY, color: WHITE, wrap: false });
+  mergeAndStyle(ws, row, 3, row, 7, textWithComment(monthlyValues.riyo_kaisu), { align: "left", wrap: false });
+  mergeAndStyle(ws, row, 8, row, 9, "連絡方法", { bold: true, fill: NAVY, color: WHITE, wrap: false });
   mergeAndStyle(
     ws,
     row,
     10,
     row,
-    TOTAL_COLS,
+    COLS,
     mfByKey.renraku_hoho ? checklistText(mfByKey.renraku_hoho, monthlyValues.renraku_hoho) : "",
-    { align: "left" }
+    { align: "left", wrap: false }
   );
   row++;
 
-  mergeAndStyle(ws, row, 1, row, 2, "報告先", { bold: true, fill: NAVY, color: WHITE });
-  mergeAndStyle(ws, row, 3, row, 5, textWithComment(monthlyValues.hokoku_saki), { align: "left" });
-  mergeAndStyle(ws, row, 6, row, 7, "先方担当者", { bold: true, fill: NAVY, color: WHITE });
-  mergeAndStyle(ws, row, 8, row, 10, textWithComment(monthlyValues.senpo_tantosha), { align: "left" });
-  mergeAndStyle(ws, row, 11, row, 12, "記入者", { bold: true, fill: NAVY, color: WHITE });
-  mergeAndStyle(ws, row, 13, row, TOTAL_COLS, textWithComment(monthlyValues.kinyusha), { align: "left" });
+  mergeAndStyle(ws, row, 1, row, 2, "報告先", { bold: true, fill: NAVY, color: WHITE, wrap: false });
+  mergeAndStyle(ws, row, 3, row, 5, textWithComment(monthlyValues.hokoku_saki), { align: "left", wrap: false });
+  mergeAndStyle(ws, row, 6, row, 7, "先方担当者", { bold: true, fill: NAVY, color: WHITE, wrap: false });
+  mergeAndStyle(ws, row, 8, row, 10, textWithComment(monthlyValues.senpo_tantosha), { align: "left", wrap: false });
+  mergeAndStyle(ws, row, 11, row, 12, "記入者", { bold: true, fill: NAVY, color: WHITE, wrap: false });
+  mergeAndStyle(ws, row, 13, row, COLS, textWithComment(monthlyValues.kinyusha), { align: "left", wrap: false });
   row++;
 
   row++; // spacer
@@ -147,18 +208,10 @@ async function buildReportWorkbook({ data, dailyFields, monthlyFields }) {
   // 配食者名/利用者確認印 are print-only columns for handwritten fill-in on the
   // printed sheet — not backed by a status_fields row, so they never appear in
   // the Status Input 対象フィールド picker.
-  const headerCells = [
-    "日",
-    dfByKey.youbi?.field_label || "曜",
-    "配食者名",
-    "利用者確認印",
-    dfByKey.uketori?.field_label || "受取",
-  ];
-  orderedDailyBody.forEach((f) => headerCells.push(f.field_label));
-  headerCells.forEach((label, idx) => {
+  columns.forEach((c, idx) => {
     const cell = ws.getCell(headerRow, idx + 1);
-    cell.value = label;
-    styleCell(cell, { bold: true, fill: NAVY, color: WHITE, size: 9 });
+    cell.value = c.label;
+    styleCell(cell, { bold: true, fill: NAVY, color: WHITE, size: HEADER_FONT_SIZE, wrap: false });
   });
   ws.getRow(headerRow).height = 22;
   row++;
@@ -173,30 +226,38 @@ async function buildReportWorkbook({ data, dailyFields, monthlyFields }) {
 
     const dayCell = ws.getCell(row, 1);
     dayCell.value = day;
-    styleCell(dayCell, { fill: GRAY, size: 9 });
+    styleCell(dayCell, { fill: GRAY, size: 9, wrap: false });
 
     const weekdayCell = ws.getCell(row, 2);
     weekdayCell.value = rawValue(values.youbi) || WEEKDAY_JA[dateObj.getDay()];
-    styleCell(weekdayCell, { fill: GRAY, size: 9 });
+    styleCell(weekdayCell, { fill: GRAY, size: 9, wrap: false });
 
     // 配食者名 — logged-in user stamped at save time (see StatusMatcher's handleSaveRecord).
     const haitatsushaCell = ws.getCell(row, 3);
     haitatsushaCell.value = rawValue(values.delivery_person) || "";
-    styleCell(haitatsushaCell, { fill: GRAY, size: 9 });
+    styleCell(haitatsushaCell, { fill: GRAY, size: 9, wrap: false });
 
     // 利用者確認印 — ○ when a photo was uploaded for this day (写真を見る), else blank.
     const kakuninCell = ws.getCell(row, 4);
     kakuninCell.value = photoDates.has(iso) ? "○" : "";
-    styleCell(kakuninCell, { fill: GRAY, size: 9 });
+    styleCell(kakuninCell, { fill: GRAY, size: 9, wrap: false });
 
     const uketoriCell = ws.getCell(row, 5);
     uketoriCell.value = rawValue(values.uketori) || "";
-    styleCell(uketoriCell, { fill: GRAY, size: 9, align: "left" });
+    styleCell(uketoriCell, { fill: GRAY, size: 9, align: "left", wrap: false });
 
-    orderedDailyBody.forEach((f, idx) => {
-      const cell = ws.getCell(row, 6 + idx);
+    // Columns 6+ (うけとりコメント, then the daily fields with their group comment
+    // columns) follow the `columns` list built above.
+    columns.slice(5).forEach((c, i) => {
+      const cell = ws.getCell(row, 6 + i);
+      if (c.kind === "comment") {
+        cell.value = rawComment(values[c.commentKey]);
+        styleCell(cell, { fill: c.fill, size: 9, align: "left", wrap: false });
+        return;
+      }
+      const f = c.field;
       const fv = values[f.field_key];
-      if (f.field_type === "checkbox") {
+      if (c.kind === "checkbox") {
         cell.value = isChecked(fv) ? "✓" : "";
       } else {
         cell.value = textWithComment(fv);
@@ -204,7 +265,7 @@ async function buildReportWorkbook({ data, dailyFields, monthlyFields }) {
       styleCell(cell, {
         fill: FIELD_GROUP[f.field_key] ? GROUP_COLOR[FIELD_GROUP[f.field_key]] : WHITE,
         size: 9,
-        align: f.field_type === "checkbox" ? "center" : "left",
+        align: c.kind === "checkbox" ? "center" : "left",
         wrap: false,
       });
     });
@@ -214,7 +275,7 @@ async function buildReportWorkbook({ data, dailyFields, monthlyFields }) {
   row++; // spacer
 
   // ---- 月次報告欄 (tally table + numbered comment blocks) ----
-  mergeAndStyle(ws, row, 1, row, TOTAL_COLS, "月次報告欄", { bold: true, size: 13, fill: ORANGE, color: WHITE });
+  mergeAndStyle(ws, row, 1, row, COLS, "月次報告欄", { bold: true, size: 13, fill: ORANGE, color: WHITE });
   row++;
 
   mergeAndStyle(ws, row, 1, row, 2, "分類", { bold: true, fill: NAVY, color: WHITE });
@@ -226,7 +287,7 @@ async function buildReportWorkbook({ data, dailyFields, monthlyFields }) {
     row,
     10,
     row,
-    TOTAL_COLS,
+    COLS,
     "報告書コメント欄｜該当するものに✓＋必要時のみ一言",
     { bold: true, fill: NAVY, color: WHITE }
   );
@@ -272,7 +333,7 @@ async function buildReportWorkbook({ data, dailyFields, monthlyFields }) {
     const r2 = r1 + span - 1;
 
     const commentCell = ws.getCell(r1, 10);
-    ws.mergeCells(r1, 9, r2, TOTAL_COLS);
+    ws.mergeCells(r1, 9, r2, COLS);
     const optionsLine = checklistText(block.field, monthlyValues[block.field.field_key]);
     const freeText = block.freeTextField ? textWithComment(monthlyValues[block.freeTextField.field_key]) : "";
     const numeral = CIRCLED_NUMBERS[block.number - 1] || `${block.number}.`;
@@ -289,7 +350,7 @@ async function buildReportWorkbook({ data, dailyFields, monthlyFields }) {
 
   // ---- 総評 ----
   mergeAndStyle(ws, row, 1, row, 2, "総評", { bold: true, fill: NAVY, color: WHITE });
-  mergeAndStyle(ws, row, 3, row, TOTAL_COLS, textWithComment(monthlyValues.sohyo), { align: "left", valign: "top" });
+  mergeAndStyle(ws, row, 3, row, COLS, textWithComment(monthlyValues.sohyo), { align: "left", valign: "top" });
   ws.getRow(row).height = 40;
   row++;
 
@@ -306,12 +367,12 @@ async function buildReportWorkbook({ data, dailyFields, monthlyFields }) {
     row,
     15,
     row,
-    TOTAL_COLS,
+    COLS,
     mfByKey.kyoyu_status ? checklistText(mfByKey.kyoyu_status, monthlyValues.kyoyu_status) : "",
     { align: "left", size: 9 }
   );
 
-  const lastColLetter = String.fromCharCode(64 + TOTAL_COLS); // TOTAL_COLS <= 26
+  const lastColLetter = String.fromCharCode(64 + COLS); // COLS <= 26
   ws.pageSetup.printArea = `A1:${lastColLetter}${row}`;
 
   return workbook;
