@@ -666,31 +666,6 @@ export default function StatusMatcher() {
   // Which group option (e.g. 体調他) currently has its follow-up choices open.
   const [openGroupOption, setOpenGroupOption] = useState<string | null>(null);
 
-  // Saves the record in the background right after a Target Field choice is
-  // clicked, so the Report reflects it without waiting for 保存. Saves run one
-  // after another so a quick second click can't be overwritten by the first.
-  // Photos are still only uploaded by 保存.
-  const autoSaveChainRef = useRef<Promise<void>>(Promise.resolve());
-  const autoSaveSelection = (nextValues: Record<string, { value?: any; comment?: string }>) => {
-    const patient = selectedPatientRef.current;
-    if (!patient) return;
-    const screen = screenKeyRef.current;
-    const baseParams =
-      screen === "daily_status"
-        ? { screen_key: screen, patient_id: patient.id, record_date: recordDateRef.current }
-        : { screen_key: screen, patient_id: patient.id, record_year_month: yearMonthRef.current };
-    const payloadValues =
-      screen === "daily_status"
-        ? { ...nextValues, delivery_person: { value: user?.username || "" } }
-        : nextValues;
-    autoSaveChainRef.current = autoSaveChainRef.current
-      .then(() => saveStatusRecord({ ...baseParams, values: payloadValues }))
-      .then(
-        () => {},
-        (e) => console.error("auto-save failed", e)
-      );
-  };
-
   // `replace` (used for voice answers) clears the field's previous selection
   // first so only the newly spoken option remains — even on a `multiple`
   // picker, where a tap toggles options individually instead.
@@ -709,7 +684,6 @@ export default function StatusMatcher() {
       };
       valuesRef.current = next;
       setValues(next);
-      autoSaveSelection(next);
       setStatusMsg(
         `${group.field_label}: 「${option.label}」を${wasSelected ? "外しました" : "記録しました"}（複数選択可）`
       );
@@ -724,7 +698,6 @@ export default function StatusMatcher() {
     next[option.key!] = { ...(v[option.key!] || {}), value: option.value };
     valuesRef.current = next;
     setValues(next);
-    autoSaveSelection(next);
     setStatusMsg(`${group.field_label}: 「${option.label}」を記録しました`);
   };
 
@@ -1125,7 +1098,6 @@ export default function StatusMatcher() {
     const next = { ...valuesRef.current, [key]: { ...(valuesRef.current[key] || {}), value: choice } };
     valuesRef.current = next;
     setValues(next);
-    autoSaveSelection(next);
     setMatchStatus("match");
     setStatusMsg(`「${choice}」を記録しました`);
     advanceFlow(key, next);
@@ -1693,7 +1665,6 @@ export default function StatusMatcher() {
                                 const key = focusField.field_key;
                                 setFieldValue(key, p);
                                 const snapshot = { ...valuesRef.current, [key]: { ...(valuesRef.current[key] || {}), value: p } };
-                                if (key === "uketori") autoSaveSelection(snapshot);
                                 advanceFlow(key, snapshot);
                               }}
                             >
