@@ -96,6 +96,13 @@ a {
   text-decoration: none;
 }
 
+/* Lets a flex child shrink below its content width, so long text inside it can
+   truncate/wrap instead of pushing the row wider than the screen. (Bootstrap
+   has no such utility; the Patients list relies on it.) */
+.min-w-0 {
+  min-width: 0 !important;
+}
+
 ::selection {
   background: var(--brand-200);
   color: var(--brand-900);

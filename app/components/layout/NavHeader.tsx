@@ -23,7 +23,7 @@ const NavHeader: React.FC<NavHeaderProps> = ({
   isSidebarExpanded,
   reserveInstallButtonSpace,
 }) => {
-  const collapsedWidth = 80;
+  const collapsedWidth = 88; // must match .sidebarCollapsed in SideBar.module.css
   const expandedWidth = 220;
 
   const navRef = useRef<HTMLElement>(null);
