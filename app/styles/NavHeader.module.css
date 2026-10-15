@@ -89,6 +89,24 @@
   padding-right: 160px;
 }
 
+/* Phones: let the brand sit beside the menu button and wrap inside itself
+   (title, then the patient badge) instead of dropping to its own row below
+   the button — the header stays one row shorter and nothing is clipped. */
+@media (max-width: 575.98px) {
+  .headerBrand.headerBrand {
+    flex: 1 1 0;
+    min-width: 0;
+    margin-right: 0.5rem;
+    gap: 0.4rem;
+    white-space: normal;
+  }
+
+  .patientBadge {
+    margin-left: 0;
+    max-width: 100%;
+  }
+}
+
 @media (max-width: 480px) {
   .reserveInstallSpace {
     padding-right: 56px;

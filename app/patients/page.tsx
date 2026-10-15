@@ -147,7 +147,7 @@ export default function PatientsPage() {
         <Row className="justify-content-center">
           <Col lg={10} xl={8}>
             <Card>
-              <Card.Body className="p-4">
+              <Card.Body className="p-3 p-md-4">
                 {message && (
                   <Alert
                     variant={message.type === "success" ? "success" : "danger"}
