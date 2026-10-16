@@ -304,9 +304,6 @@ export default function ReportPage() {
                 {selectedPatient ? (
                   <div className="form-control bg-light">
                     {selectedPatient.name}
-                    <span className="text-muted small ms-2">
-                      (pat_id {selectedPatient.pat_id ?? selectedPatient.id})
-                    </span>
                   </div>
                 ) : (
                   <div>

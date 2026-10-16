@@ -89,19 +89,30 @@
   padding-right: 160px;
 }
 
-/* Phones: let the brand sit beside the menu button and wrap inside itself
-   (title, then the patient badge) instead of dropping to its own row below
-   the button — the header stays one row shorter and nothing is clipped. */
+/* Phones: the brand sits beside the menu button with the icon and title on
+   one line and the patient badge on the line below. Neither text wraps; the
+   welcome pill drops to its own row when there isn't room beside the brand.
+   Ellipsis is only a last-resort fallback for very narrow screens or
+   unusually long names, so nothing overflows horizontally. */
 @media (max-width: 575.98px) {
   .headerBrand.headerBrand {
-    flex: 1 1 0;
+    flex: 0 1 auto;
     min-width: 0;
     margin-right: 0.5rem;
     gap: 0.4rem;
-    white-space: normal;
+    white-space: nowrap;
+  }
+
+  .headerTitle,
+  .patientBadge {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .patientBadge {
+    display: inline-block;
     margin-left: 0;
     max-width: 100%;
   }
