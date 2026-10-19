@@ -3,7 +3,7 @@
 "use client";
 
 import { useState } from "react";
-import { Form, Button, Alert, InputGroup } from "react-bootstrap";
+import { Form, Button, Alert, InputGroup, Spinner } from "react-bootstrap";
 import { ClipboardHeart, EyeFill, EyeSlashFill, PersonFill, KeyFill } from "react-bootstrap-icons";
 import { useAuth } from "@/app/context/AuthContext";
 import styles from "@/app/styles/LoginForm.module.css";
@@ -50,7 +50,7 @@ export default function LoginForm() {
 
         <Form onSubmit={handleSubmit} suppressHydrationWarning>
           {error && (
-            <Alert variant="danger" className="py-2">
+            <Alert variant="danger" className="py-2" role="alert">
               {error}
             </Alert>
           )}
@@ -66,6 +66,9 @@ export default function LoginForm() {
                 placeholder="ユーザー名を入力してください (例: admin)"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
+                autoComplete="username"
+                autoCapitalize="none"
+                autoCorrect="off"
                 required
                 suppressHydrationWarning
               />
@@ -83,6 +86,7 @@ export default function LoginForm() {
                 placeholder="パスワードを入力してください"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                autoComplete="current-password"
                 required
                 suppressHydrationWarning
               />
@@ -97,7 +101,8 @@ export default function LoginForm() {
           </Form.Group>
 
           <div className="d-grid">
-            <Button variant="primary" type="submit" size="lg" disabled={submitting}>
+            <Button variant="primary" type="submit" size="lg" disabled={submitting} aria-busy={submitting}>
+              {submitting && <Spinner animation="border" size="sm" className="me-2 text-white" />}
               {submitting ? "ログイン中…" : "ログイン"}
             </Button>
           </div>

@@ -44,7 +44,7 @@ const SideBar: React.FC<SideBarProps> = ({
         variant="custom"
         onClick={onToggle}
         className={styles.toggleButton}
-        aria-label="Toggle Sidebar"
+        aria-label={isExpanded ? "サイドバーを閉じる" : "サイドバーを開く"}
       >
         {isExpanded ? <ChevronLeft size={18} /> : <ChevronRight size={18} />}
       </Button>
@@ -64,7 +64,13 @@ const SideBar: React.FC<SideBarProps> = ({
         {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
           const isActive = pathname === href;
           return (
-            <Link key={href} href={href} className="no-decoration" title={label}>
+            <Link
+              key={href}
+              href={href}
+              className={styles.navLink}
+              title={label}
+              aria-current={isActive ? "page" : undefined}
+            >
               <div
                 className={`${styles.sidebarButton} ${isActive ? styles.sidebarButtonActive : ""}`}
               >

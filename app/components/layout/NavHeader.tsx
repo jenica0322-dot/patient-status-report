@@ -4,6 +4,7 @@
 import React, { useEffect, useRef } from "react";
 import { Navbar, Container, Nav, Button } from "react-bootstrap";
 import { List, PersonCircle, ClipboardHeart } from "react-bootstrap-icons";
+import Link from "next/link";
 import styles from "@/app/styles/NavHeader.module.css";
 
 type NavHeaderProps = {
@@ -75,11 +76,12 @@ const NavHeader: React.FC<NavHeaderProps> = ({
           variant="outline-secondary"
           className={`d-md-none me-2 ${styles.menuButton}`}
           onClick={onMenuClick}
+          aria-label="メニューを開く"
         >
           <List size={24} />
         </Button>
 
-        <Navbar.Brand href="/" className={styles.headerBrand}>
+        <Navbar.Brand as={Link} href="/" className={styles.headerBrand}>
           <span className={styles.brandIcon}>
             <ClipboardHeart size={18} />
           </span>

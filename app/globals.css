@@ -17,29 +17,36 @@ body {
 }
 
 :root {
-  /* Brand: clinical teal */
-  --brand-50: #f0fdfa;
-  --brand-100: #ccfbf1;
-  --brand-200: #99f6e4;
-  --brand-300: #5eead4;
-  --brand-400: #2dd4bf;
-  --brand-500: #14b8a6;
-  --brand-600: #0d9488;
-  --brand-700: #0f766e;
-  --brand-800: #115e59;
-  --brand-900: #134e4a;
+  /* Brand: orange + blush pink on white.
+     500 is the primary orange; 600/700 are darker steps used for hover/active
+     states and for orange *text*, which needs the extra depth to stay readable
+     on white (#c2410c is about 5.2:1). 50 is the pale pink used for selected
+     areas, 200 the blush accent. */
+  --brand-50: #fff1ed;
+  --brand-100: #ffe4db;
+  --brand-200: #f4b8a8;
+  --brand-300: #f6a07c;
+  --brand-400: #fb8b4a;
+  --brand-500: #f97316;
+  --brand-600: #ea580c;
+  --brand-700: #c2410c;
+  --brand-800: #9a3412;
+  --brand-900: #7c2d12;
 
   --primary-bg: #ffffff;
-  --secondary-bg: #f7fafa;
-  --accent-bg: #eef7f6;
-  --app-bg: #f4f8f8;
+  --secondary-bg: #fff8f5;
+  --accent-bg: #fff1ed;
+  --app-bg: #ffffff;
 
-  --primary-text: #1e293b;
-  --secondary-text: #64748b;
-  --accent-text: #0f172a;
+  /* Warm charcoal text. Secondary text stays at least 4.8:1 on white and on
+     the pale pink surfaces. */
+  --primary-text: #51413c;
+  --secondary-text: #7a6862;
+  --accent-text: #3f312d;
 
-  --primary-blue: var(--brand-600);
-  --primary-blue-hover: var(--brand-700);
+  /* Older names kept so existing component styles pick up the new theme. */
+  --primary-blue: var(--brand-500);
+  --primary-blue-hover: var(--brand-600);
 
   --success-green: #10b981;
   --success-bg: #ecfdf5;
@@ -51,38 +58,57 @@ body {
   --warning-bg: #fffbeb;
   --warning-text: #92400e;
 
-  --border-color: #e2e8f0;
-  --border-color-strong: #cbd5e1;
+  --border-color: #f3e1da;
+  --border-color-strong: #e9c7bb;
 
   --radius-sm: 8px;
   --radius-md: 12px;
   --radius-lg: 16px;
   --radius-xl: 20px;
 
-  --shadow-sm: 0 1px 2px 0 rgba(15, 23, 42, 0.05);
-  --shadow-md: 0 4px 10px -2px rgba(15, 23, 42, 0.08);
-  --shadow-lg: 0 12px 24px -6px rgba(15, 23, 42, 0.12);
-  --shadow-xl: 0 24px 48px -12px rgba(15, 23, 42, 0.18);
+  --shadow-sm: 0 1px 2px 0 rgba(81, 65, 60, 0.06);
+  --shadow-md: 0 4px 10px -2px rgba(81, 65, 60, 0.1);
+  --shadow-lg: 0 12px 24px -6px rgba(81, 65, 60, 0.14);
+  --shadow-xl: 0 24px 48px -12px rgba(81, 65, 60, 0.2);
 
-  --gradient-primary: linear-gradient(135deg, var(--brand-500) 0%, var(--brand-700) 100%);
-  --gradient-secondary: linear-gradient(135deg, var(--brand-400) 0%, #0891b2 100%);
+  --gradient-primary: linear-gradient(135deg, #fb923c 0%, var(--brand-500) 55%, var(--brand-600) 100%);
+  --gradient-secondary: linear-gradient(135deg, var(--brand-200) 0%, var(--brand-500) 100%);
+
+  /* Focus ring shared by inputs and buttons */
+  --focus-ring: 0 0 0 0.2rem rgba(249, 115, 22, 0.22);
 
   --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
 
   /* Bootstrap 5.3 theme overrides */
-  --bs-primary: var(--brand-600);
-  --bs-primary-rgb: 13, 148, 136;
+  --bs-primary: var(--brand-500);
+  --bs-primary-rgb: 249, 115, 22;
+  --bs-primary-text-emphasis: var(--brand-800);
+  --bs-primary-bg-subtle: var(--brand-50);
+  --bs-primary-border-subtle: var(--brand-200);
   --bs-body-font-family: var(--font-geist-sans), "Hiragino Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --bs-body-bg: var(--app-bg);
   --bs-body-color: var(--primary-text);
+  --bs-body-color-rgb: 81, 65, 60;
+  --bs-emphasis-color: var(--accent-text);
+  --bs-heading-color: var(--accent-text);
+  --bs-secondary-color: var(--secondary-text);
+  --bs-secondary-bg: var(--secondary-bg);
+  --bs-tertiary-bg: var(--secondary-bg);
+  --bs-light-rgb: 255, 248, 245;
+  /* Warm neutrals for Bootstrap's gray/dark utilities (area badges,
+     text-dark, etc.); white on #7a6862 is about 5.4:1. */
+  --bs-secondary-rgb: 122, 104, 98;
+  --bs-dark-rgb: 81, 65, 60;
+  --bs-border-color: var(--border-color);
   --bs-border-radius: var(--radius-md);
   --bs-border-radius-sm: var(--radius-sm);
   --bs-border-radius-lg: var(--radius-lg);
   --bs-border-radius-xl: var(--radius-xl);
   --bs-link-color: var(--brand-700);
-  --bs-link-color-rgb: 15, 118, 110;
+  --bs-link-color-rgb: 194, 65, 12;
   --bs-link-hover-color: var(--brand-800);
-  --bs-link-hover-color-rgb: 17, 94, 89;
+  --bs-link-hover-color-rgb: 154, 52, 18;
+  --bs-focus-ring-color: rgba(249, 115, 22, 0.25);
 }
 
 * {
@@ -101,6 +127,27 @@ a {
    has no such utility; the Patients list relies on it.) */
 .min-w-0 {
   min-width: 0 !important;
+}
+
+/* A long list beside a form (e.g. registered fields on the master page)
+   scrolls inside its own card on tablet/desktop, so the page itself doesn't
+   grow past the screen. Stacked phone layouts keep normal page scrolling. */
+@media (min-width: 768px) {
+  .scroll-panel {
+    max-height: calc(100vh - var(--header-h, 88px) - 260px);
+    max-height: calc(100dvh - var(--header-h, 88px) - 260px);
+    min-height: 240px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+}
+
+/* Visible keyboard focus for custom (non-Bootstrap) buttons and links.
+   :where() keeps this at zero specificity, so Bootstrap's own .btn focus
+   ring and any component-level focus style still take precedence. */
+:where(button, a, [role="button"]):focus-visible {
+  outline: 2px solid var(--brand-500);
+  outline-offset: 2px;
 }
 
 ::selection {
@@ -125,7 +172,7 @@ a {
   background-color: var(--secondary-text);
 }
 
-/* ---------- Bootstrap component retheme (teal) ---------- */
+/* ---------- Bootstrap component retheme (orange) ---------- */
 
 .btn {
   font-weight: 600;
@@ -139,39 +186,56 @@ a {
 }
 .btn-primary {
   --bs-btn-color: #fff;
-  --bs-btn-bg: var(--brand-600);
-  --bs-btn-border-color: var(--brand-600);
+  --bs-btn-bg: var(--brand-500);
+  --bs-btn-border-color: var(--brand-500);
   --bs-btn-hover-color: #fff;
-  --bs-btn-hover-bg: var(--brand-700);
-  --bs-btn-hover-border-color: var(--brand-700);
-  --bs-btn-focus-shadow-rgb: 13, 148, 136;
+  --bs-btn-hover-bg: var(--brand-600);
+  --bs-btn-hover-border-color: var(--brand-600);
+  --bs-btn-focus-shadow-rgb: 249, 115, 22;
   --bs-btn-active-color: #fff;
-  --bs-btn-active-bg: var(--brand-800);
-  --bs-btn-active-border-color: var(--brand-800);
+  --bs-btn-active-bg: var(--brand-700);
+  --bs-btn-active-border-color: var(--brand-700);
   --bs-btn-disabled-color: #fff;
   --bs-btn-disabled-bg: var(--brand-300);
   --bs-btn-disabled-border-color: var(--brand-300);
   box-shadow: var(--shadow-sm);
 }
-.btn-primary:hover {
-  box-shadow: var(--shadow-md);
-  transform: translateY(-1px);
+/* Hover lift only where hover is real — on touch screens :hover sticks
+   after a tap and leaves the button raised. */
+@media (hover: hover) {
+  .btn-primary:hover {
+    box-shadow: var(--shadow-md);
+    transform: translateY(-1px);
+  }
+  .btn-outline-primary:hover {
+    transform: translateY(-1px);
+  }
 }
 .btn-outline-primary {
   --bs-btn-color: var(--brand-700);
   --bs-btn-border-color: var(--brand-500);
   --bs-btn-hover-color: #fff;
-  --bs-btn-hover-bg: var(--brand-600);
-  --bs-btn-hover-border-color: var(--brand-600);
-  --bs-btn-focus-shadow-rgb: 13, 148, 136;
+  --bs-btn-hover-bg: var(--brand-500);
+  --bs-btn-hover-border-color: var(--brand-500);
+  --bs-btn-focus-shadow-rgb: 249, 115, 22;
   --bs-btn-active-color: #fff;
-  --bs-btn-active-bg: var(--brand-700);
-  --bs-btn-active-border-color: var(--brand-700);
+  --bs-btn-active-bg: var(--brand-600);
+  --bs-btn-active-border-color: var(--brand-600);
   --bs-btn-disabled-color: var(--brand-300);
   --bs-btn-disabled-border-color: var(--brand-200);
 }
-.btn-outline-primary:hover {
-  transform: translateY(-1px);
+/* Neutral secondary buttons (menu, password eye, いいえ) in warm tones
+   instead of Bootstrap's cool gray. */
+.btn-outline-secondary {
+  --bs-btn-color: var(--primary-text);
+  --bs-btn-border-color: var(--border-color-strong);
+  --bs-btn-hover-color: var(--brand-800);
+  --bs-btn-hover-bg: var(--accent-bg);
+  --bs-btn-hover-border-color: var(--brand-200);
+  --bs-btn-focus-shadow-rgb: 249, 115, 22;
+  --bs-btn-active-color: var(--brand-800);
+  --bs-btn-active-bg: var(--brand-100);
+  --bs-btn-active-border-color: var(--brand-200);
 }
 .btn-success,
 .btn-outline-success:hover {
@@ -195,18 +259,23 @@ a {
 .form-control:focus,
 .form-select:focus {
   border-color: var(--brand-500);
-  box-shadow: 0 0 0 0.2rem rgba(13, 148, 136, 0.15);
+  box-shadow: var(--focus-ring);
 }
 .form-check-input {
   cursor: pointer;
 }
 .form-check-input:checked {
-  background-color: var(--brand-600);
-  border-color: var(--brand-600);
+  background-color: var(--brand-500);
+  border-color: var(--brand-500);
 }
 .form-check-input:focus {
   border-color: var(--brand-500);
-  box-shadow: 0 0 0 0.2rem rgba(13, 148, 136, 0.15);
+  box-shadow: var(--focus-ring);
+}
+.input-group-text {
+  background-color: var(--secondary-bg);
+  border-color: var(--border-color);
+  color: var(--brand-600);
 }
 .form-label {
   font-weight: 600;
@@ -271,7 +340,73 @@ thead.table-light,
 }
 
 .spinner-border {
-  color: var(--brand-600);
+  color: var(--brand-500);
+}
+
+/* Info alerts (in-progress / neutral status messages) in the brand's pale
+   pink instead of Bootstrap's cyan. Success/danger keep their meaning colors. */
+.alert-info {
+  --bs-alert-color: var(--brand-800);
+  --bs-alert-bg: var(--brand-50);
+  --bs-alert-border-color: var(--brand-200);
+}
+
+/* Modals and the offcanvas menu share the theme. */
+.modal-content {
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xl);
+}
+.modal-header,
+.offcanvas-header {
+  border-bottom: 1px solid var(--border-color);
+}
+.modal-header {
+  background-color: var(--secondary-bg);
+}
+.modal-title,
+.offcanvas-title {
+  color: var(--accent-text);
+  font-weight: 700;
+}
+.modal-footer {
+  border-top: 1px solid var(--border-color);
+}
+
+/* react-datepicker (記録日 / 記録月): its default blue replaced with orange. */
+.react-datepicker {
+  font-family: inherit;
+  border-color: var(--border-color);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  color: var(--primary-text);
+}
+.react-datepicker__header {
+  background-color: var(--secondary-bg);
+  border-bottom-color: var(--border-color);
+}
+.react-datepicker__current-month,
+.react-datepicker-year-header,
+.react-datepicker__day-name {
+  color: var(--accent-text);
+}
+.react-datepicker__day:hover,
+.react-datepicker__month-text:hover {
+  background-color: var(--brand-50);
+}
+.react-datepicker__day--selected,
+.react-datepicker__day--keyboard-selected,
+.react-datepicker__month-text--selected,
+.react-datepicker__month-text--keyboard-selected {
+  background-color: var(--brand-500) !important;
+  color: #fff !important;
+}
+.react-datepicker__day--today,
+.react-datepicker__month-text--today {
+  color: var(--brand-700);
+}
+.react-datepicker__navigation-icon::before {
+  border-color: var(--brand-600);
 }
 
 .shadow-sm {

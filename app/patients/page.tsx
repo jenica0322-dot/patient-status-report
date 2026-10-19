@@ -123,7 +123,7 @@ export default function PatientsPage() {
   return (
     <Layout>
       <Container fluid className="py-2">
-        <div className="d-flex align-items-center mb-4">
+        <div className="d-flex align-items-center mb-3">
           <div
             className="d-flex align-items-center justify-content-center me-3 flex-shrink-0"
             style={{
@@ -198,7 +198,7 @@ export default function PatientsPage() {
                       return (
                         <div
                           key={p.id}
-                          className="d-flex justify-content-between align-items-center p-3 rounded-3"
+                          className="d-flex justify-content-between align-items-center gap-2 p-3 rounded-3"
                           style={{
                             border: `1px solid ${isSelected ? "var(--brand-300)" : "var(--border-color)"}`,
                             background: isSelected ? "var(--brand-50)" : "var(--primary-bg)",
@@ -233,9 +233,9 @@ export default function PatientsPage() {
                                 )}
                                 {isSelected && (
                                   <Badge
-                                    bg="success"
+                                    bg=""
                                     pill
-                                    className="d-flex align-items-center gap-1"
+                                    className="d-flex align-items-center gap-1 bg-primary-subtle text-primary-emphasis border border-primary-subtle"
                                   >
                                     <CheckCircleFill size={11} />
                                     選択中
@@ -252,7 +252,7 @@ export default function PatientsPage() {
                             </div>
                           </div>
                           <Button
-                            variant={isSelected ? "outline-success" : "outline-primary"}
+                            variant={isSelected ? "primary" : "outline-primary"}
                             size="sm"
                             className="flex-shrink-0"
                             onClick={() => handleSelect(p)}

@@ -899,7 +899,7 @@ export default function StatusMatcher() {
     setMatchStatus("none");
     setMatches([]);
     setStatusMsg(`➡ ${field.field_label} を確認します`);
-    speak(`${field.field_label}を教えてください`);
+    speak(field.field_label);
   };
 
   // Asks the final "保存しますか？" once every Target Field has been answered.
