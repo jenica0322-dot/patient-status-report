@@ -233,9 +233,9 @@ export default function PatientsPage() {
                                 )}
                                 {isSelected && (
                                   <Badge
-                                    bg=""
+                                    bg="success"
                                     pill
-                                    className="d-flex align-items-center gap-1 bg-primary-subtle text-primary-emphasis border border-primary-subtle"
+                                    className="d-flex align-items-center gap-1"
                                   >
                                     <CheckCircleFill size={11} />
                                     選択中
@@ -252,7 +252,7 @@ export default function PatientsPage() {
                             </div>
                           </div>
                           <Button
-                            variant={isSelected ? "primary" : "outline-primary"}
+                            variant={isSelected ? "outline-success" : "outline-primary"}
                             size="sm"
                             className="flex-shrink-0"
                             onClick={() => handleSelect(p)}
