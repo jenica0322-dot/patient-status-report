@@ -164,7 +164,7 @@
   .scrollHint {
     display: block;
     font-size: 0.8rem;
-    color: var(--secondary-text, #7a6862);
+    color: var(--secondary-text, #64748b);
     margin-bottom: 0.5rem;
   }
 }

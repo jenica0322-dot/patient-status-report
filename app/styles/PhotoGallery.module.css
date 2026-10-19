@@ -2,7 +2,7 @@
 
 .galleryEmpty {
   text-align: center;
-  color: var(--secondary-text, #7a6862);
+  color: var(--secondary-text, #64748b);
   padding: 2rem 0;
 }
 
@@ -17,7 +17,7 @@
 .galleryGroupLabel {
   font-size: 0.8rem;
   font-weight: 700;
-  color: var(--secondary-text, #7a6862);
+  color: var(--secondary-text, #64748b);
   text-transform: uppercase;
   letter-spacing: 0.04em;
   margin-bottom: 0.5rem;
@@ -37,7 +37,7 @@
   overflow: hidden;
   border: 1px solid var(--border-color, #e2e8f0);
   cursor: pointer;
-  background: var(--secondary-bg, #fff8f5);
+  background: var(--secondary-bg, #f7fafa);
   padding: 0;
 }
 
@@ -58,7 +58,7 @@
   border: none;
   background: #fff;
   color: var(--danger-red, #dc2626);
-  box-shadow: 0 1px 4px rgba(43, 33, 30, 0.35);
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.35);
   display: flex;
   align-items: center;
   justify-content: center;

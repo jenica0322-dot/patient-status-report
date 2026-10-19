@@ -201,7 +201,7 @@
 
 .areaOptionActive {
   background: var(--brand-50);
-  color: var(--brand-700, #c2410c);
+  color: var(--brand-700, #0f766e);
   font-weight: 600;
 }
 
@@ -268,7 +268,7 @@
 
 .itemCheck {
   margin-left: auto;
-  color: var(--brand-500);
+  color: var(--success-green);
   flex-shrink: 0;
 }
 

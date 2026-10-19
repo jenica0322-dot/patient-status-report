@@ -136,7 +136,7 @@
 }
 
 .photoThumbPending {
-  border: 2px dashed var(--primary-blue, #f97316);
+  border: 2px dashed var(--primary-blue, #0d9488);
 }
 
 .photoThumbPendingBadge {
@@ -148,7 +148,7 @@
   font-weight: 700;
   text-align: center;
   color: #fff;
-  background: rgba(194, 65, 12, 0.92);
+  background: rgba(13, 148, 136, 0.85);
   padding: 1px 0;
   pointer-events: none;
 }
@@ -161,7 +161,7 @@
   height: 20px;
   border-radius: 50%;
   border: none;
-  background: rgba(43, 33, 30, 0.65);
+  background: rgba(15, 23, 42, 0.65);
   color: #fff;
   display: flex;
   align-items: center;
@@ -259,8 +259,8 @@
 }
 
 .choiceList .choiceItemSelected {
-  border-color: var(--brand-500);
-  background: var(--brand-50);
+  border-color: var(--bs-success);
+  background: var(--bs-success-bg-subtle);
 }
 
 .choiceMark {
@@ -278,8 +278,8 @@
 }
 
 .choiceMarkSelected {
-  border-color: var(--brand-500);
-  background: var(--brand-500);
+  border-color: var(--bs-success);
+  background: var(--bs-success);
   color: #fff;
 }
 
@@ -428,7 +428,7 @@
 @media (hover: hover) {
   .micButton:hover {
     transform: scale(1.05) translateY(-2px);
-    box-shadow: 0 20px 40px rgba(249, 115, 22, 0.3);
+    box-shadow: 0 20px 40px rgba(13, 148, 136, 0.3);
   }
 
   .micButton:hover::before {
@@ -521,7 +521,7 @@
 
 .fieldTriggerOpen {
   border-color: var(--primary-blue);
-  box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.15);
+  box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.15);
 }
 
 .fieldChevron {
@@ -569,7 +569,7 @@
 
 .fieldOptionActive {
   background: var(--brand-50);
-  color: var(--brand-700, #c2410c);
+  color: var(--brand-700, #0f766e);
   font-weight: 600;
 }
 
@@ -606,9 +606,9 @@
 }
 
 .checkboxToggle.checked {
-  background: var(--brand-50);
-  border-color: var(--brand-500);
-  color: var(--brand-800);
+  background: var(--success-bg);
+  border-color: var(--success-green);
+  color: var(--success-text);
 }
 
 /* Responsive design */
@@ -652,32 +652,4 @@
   .commentInput {
     font-size: 16px;
   }
-}
-
-/* Theme: on this screen a chosen answer reads as "selected" (orange on pale
-   pink), not as a success message, and 保存 / はい（保存する） are the screen's
-   primary actions, so they use the primary orange. Saved/failed status
-   alerts keep their green/red meaning colors. */
-.targetBox :global(.badge.bg-success) {
-  background-color: var(--brand-500) !important;
-}
-
-.targetBox :global(.text-success) {
-  color: var(--brand-700) !important;
-}
-
-.wrapper :global(.btn-success) {
-  --bs-btn-color: #fff;
-  --bs-btn-bg: var(--brand-500);
-  --bs-btn-border-color: var(--brand-500);
-  --bs-btn-hover-color: #fff;
-  --bs-btn-hover-bg: var(--brand-600);
-  --bs-btn-hover-border-color: var(--brand-600);
-  --bs-btn-focus-shadow-rgb: 249, 115, 22;
-  --bs-btn-active-color: #fff;
-  --bs-btn-active-bg: var(--brand-700);
-  --bs-btn-active-border-color: var(--brand-700);
-  --bs-btn-disabled-color: #fff;
-  --bs-btn-disabled-bg: var(--brand-300);
-  --bs-btn-disabled-border-color: var(--brand-300);
 }

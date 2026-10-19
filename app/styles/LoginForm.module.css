@@ -8,9 +8,9 @@
   align-items: center;
   justify-content: center;
   padding: 1.5rem;
-  background: radial-gradient(circle at 20% 20%, var(--brand-100, #ffe4db) 0%, transparent 45%),
-    radial-gradient(circle at 80% 80%, var(--brand-100, #ffe4db) 0%, transparent 40%),
-    var(--app-bg, #ffffff);
+  background: radial-gradient(circle at 20% 20%, var(--brand-100, #ccfbf1) 0%, transparent 45%),
+    radial-gradient(circle at 80% 80%, var(--brand-100, #ccfbf1) 0%, transparent 40%),
+    var(--app-bg, #f4f8f8);
 }
 
 .card {
@@ -51,14 +51,14 @@
 .title {
   font-size: 1.35rem;
   font-weight: 700;
-  color: var(--accent-text, #3f312d);
+  color: var(--accent-text, #0f172a);
   text-align: center;
   margin-bottom: 0.35rem;
 }
 
 .subtitle {
   font-size: 0.9rem;
-  color: var(--secondary-text, #7a6862);
+  color: var(--secondary-text, #64748b);
   text-align: center;
   margin-bottom: 1.75rem;
 }

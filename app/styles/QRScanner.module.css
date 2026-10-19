@@ -4,7 +4,7 @@
   position: fixed;
   inset: 0;
   z-index: 1200; /* above the sidebar/offcanvas */
-  background: rgba(43, 33, 30, 0.96);
+  background: rgba(15, 23, 42, 0.96);
   display: flex;
   flex-direction: column;
 }
@@ -70,7 +70,7 @@
   height: min(70vw, 280px);
   border: 3px solid rgba(16, 185, 129, 0.9);
   border-radius: 16px;
-  box-shadow: 0 0 0 9999px rgba(43, 33, 30, 0.35);
+  box-shadow: 0 0 0 9999px rgba(15, 23, 42, 0.35);
   pointer-events: none;
 }
 
