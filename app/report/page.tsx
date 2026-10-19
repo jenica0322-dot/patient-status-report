@@ -122,6 +122,9 @@ export default function ReportPage() {
     if (!patientId) return;
     let cancelled = false;
     const refresh = () => {
+      // Skip while the tab is in the background; visibilitychange below
+      // refreshes as soon as it's shown again.
+      if (document.visibilityState === "hidden") return;
       fetchPatientReport(patientId, yearMonth)
         .then((data) => {
           if (!cancelled) setReport(data);
@@ -159,10 +162,18 @@ export default function ReportPage() {
     load();
     // A photo can be added from Status Input (写真追加) in another tab/screen —
     // poll so 利用者確認印 picks it up here without a manual page refresh.
-    const intervalId = setInterval(load, 8000);
+    // Polling pauses while the tab is hidden and catches up when it's shown.
+    const intervalId = setInterval(() => {
+      if (document.visibilityState !== "hidden") load();
+    }, 8000);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") load();
+    };
+    document.addEventListener("visibilitychange", onVisible);
     return () => {
       cancelled = true;
       clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", onVisible);
     };
   }, [patientId, yearMonth]);
 
@@ -277,7 +288,7 @@ export default function ReportPage() {
   return (
     <Layout>
       <Container fluid className="py-2">
-        <div className="d-flex align-items-center mb-4">
+        <div className="d-flex align-items-center mb-3">
           <div
             className="d-flex align-items-center justify-content-center me-3 flex-shrink-0"
             style={{
@@ -296,7 +307,7 @@ export default function ReportPage() {
           </div>
         </div>
 
-        <Card className={`mb-4 ${styles.noPrint} ${styles.toolbarCard}`}>
+        <Card className={`mb-3 ${styles.noPrint} ${styles.toolbarCard}`}>
           <Card.Body>
             <Row className="g-3 align-items-end">
               <Col md={5} className={styles.toolbarUserCol}>
@@ -308,10 +319,8 @@ export default function ReportPage() {
                 ) : (
                   <div>
                     <div className="text-muted small mb-2">先に利用者を選択してください</div>
-                    <Link href="/patients">
-                      <Button variant="outline-primary" size="sm">
-                        利用者選択へ
-                      </Button>
+                    <Link href="/patients" className="btn btn-outline-primary btn-sm">
+                      利用者選択へ
                     </Link>
                   </div>
                 )}
@@ -637,10 +646,11 @@ export default function ReportPage() {
                       }}
                     >
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={photo.url} alt={photo.original_filename || "写真"} />
+                      <img src={photo.url} alt={photo.original_filename || "写真"} loading="lazy" decoding="async" />
                       <button
                         type="button"
                         className={galleryStyles.galleryThumbDelete}
+                        aria-label="写真を削除"
                         onClick={(e) => {
                           e.stopPropagation();
                           handleDeleteReportPhoto(photo);

@@ -10,7 +10,7 @@
   align-items: center;
   gap: 8px;
 
-  background: var(--gradient-primary, #0d9488);
+  background: var(--gradient-primary, #f97316);
   color: white;
   border: none;
   border-radius: var(--radius-md, 10px);

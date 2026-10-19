@@ -146,7 +146,7 @@ export default function RegisterFields() {
 
   return (
     <Container fluid className="py-2">
-      <div className="d-flex align-items-center mb-4">
+      <div className="d-flex align-items-center mb-3">
         <div
           className="d-flex align-items-center justify-content-center me-3 flex-shrink-0"
           style={{
@@ -175,9 +175,9 @@ export default function RegisterFields() {
                 </Alert>
               )}
 
-              <Form.Group className="mb-4">
+              <Form.Group className="mb-3">
                 <Form.Label>画面</Form.Label>
-                <div className="d-flex gap-2">
+                <div className="d-flex flex-wrap gap-2">
                   {SCREENS.map((s) => (
                     <Button
                       key={s.key}
@@ -192,7 +192,7 @@ export default function RegisterFields() {
 
               <Row>
                 <Col md={7}>
-                  <Card className="mb-4">
+                  <Card className="mb-3 mb-md-0">
                     <Card.Header>
                       <Database className="me-2" />
                       フィールド情報
@@ -340,7 +340,7 @@ export default function RegisterFields() {
                           フィールドがありません
                         </div>
                       ) : (
-                        <div className="list-group list-group-flush">
+                        <div className="list-group list-group-flush scroll-panel">
                           {fields.map((f) => (
                             <div key={`${f.screen_key}-${f.field_key}`} className="list-group-item">
                               <div className="d-flex justify-content-between align-items-start">

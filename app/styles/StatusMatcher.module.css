@@ -8,7 +8,6 @@
   display: flex;
   flex-direction: column;
   gap: 0.6rem;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   /* One shared size for every field label and the values/content next to
      them, kept as variables so every label and every piece of text reads
      at the same size instead of each section drifting to its own. */
@@ -137,7 +136,7 @@
 }
 
 .photoThumbPending {
-  border: 2px dashed var(--primary-blue, #0d9488);
+  border: 2px dashed var(--primary-blue, #f97316);
 }
 
 .photoThumbPendingBadge {
@@ -149,7 +148,7 @@
   font-weight: 700;
   text-align: center;
   color: #fff;
-  background: rgba(13, 148, 136, 0.85);
+  background: rgba(194, 65, 12, 0.92);
   padding: 1px 0;
   pointer-events: none;
 }
@@ -158,11 +157,11 @@
   position: absolute;
   top: 2px;
   right: 2px;
-  width: 16px;
-  height: 16px;
+  width: 20px;
+  height: 20px;
   border-radius: 50%;
   border: none;
-  background: rgba(15, 23, 42, 0.65);
+  background: rgba(43, 33, 30, 0.65);
   color: #fff;
   display: flex;
   align-items: center;
@@ -185,12 +184,15 @@
   border-radius: 14px;
   padding: 0.6rem;
   box-shadow: var(--shadow-md);
-  transition: all 0.3s ease;
+  transition: box-shadow 0.3s ease;
 }
 
-.targetBox:hover {
-  box-shadow: var(--shadow-lg);
-  transform: translateY(-2px);
+/* Hover lift only on devices with a real pointer — on touch screens a tap
+   leaves :hover "stuck", so the panel would jump up and stay raised. */
+@media (hover: hover) {
+  .targetBox:hover {
+    box-shadow: var(--shadow-lg);
+  }
 }
 
 .targetBox label {
@@ -218,24 +220,38 @@
    targets. Row height and text scale with the screen height (clamped), so the
    longest list (体調, 5 rows) always fits on screen without scrolling. */
 .choiceTitle {
-  font-size: 1.1rem;
+  font-size: 1rem;
   font-weight: 700;
+}
+
+/* The choice card sits inside .targetBox, which already has its own padding —
+   Bootstrap's default 1rem card-body padding on top of that wastes height. */
+.targetBox :global(.card-body) {
+  padding: 0.5rem 0.6rem;
 }
 
 .choiceList.choiceList {
   display: flex;
   flex-direction: column;
-  gap: clamp(0.35rem, 1vh, 0.55rem);
+  gap: clamp(0.25rem, 0.8vh, 0.5rem);
 }
 
 .choiceList .choiceItem {
-  min-height: clamp(50px, 8vh, 64px);
-  gap: 0.9rem;
-  padding: 0.5rem 1rem;
+  min-height: clamp(44px, 6.4vh, 60px);
+  gap: 0.75rem;
+  padding: 0.35rem 0.9rem;
   border: 2px solid var(--border-color);
   border-radius: 14px;
   background: var(--primary-bg);
   color: var(--primary-text);
+  text-align: left;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+@media (hover: hover) {
+  .choiceList .choiceItem:hover {
+    border-color: var(--brand-300);
+  }
 }
 
 .choiceList .choiceItemNested {
@@ -243,8 +259,8 @@
 }
 
 .choiceList .choiceItemSelected {
-  border-color: var(--bs-success);
-  background: var(--bs-success-bg-subtle);
+  border-color: var(--brand-500);
+  background: var(--brand-50);
 }
 
 .choiceMark {
@@ -252,8 +268,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: clamp(32px, 4.8vh, 38px);
-  height: clamp(32px, 4.8vh, 38px);
+  width: clamp(28px, 4vh, 36px);
+  height: clamp(28px, 4vh, 36px);
   border-radius: 50%;
   border: 2px solid var(--border-color-strong);
   background: var(--secondary-bg);
@@ -262,12 +278,13 @@
 }
 
 .choiceMarkSelected {
-  border-color: var(--bs-success);
-  background: var(--bs-success);
+  border-color: var(--brand-500);
+  background: var(--brand-500);
+  color: #fff;
 }
 
 .choiceLabel {
-  font-size: clamp(1.25rem, 3.1vh, 1.5rem);
+  font-size: clamp(1.1rem, 2.7vh, 1.45rem);
   font-weight: 700;
   line-height: 1.2;
 }
@@ -277,7 +294,7 @@
   display: flex;
   justify-content: space-between;
   gap: 0.75rem;
-  margin-top: 0.5rem;
+  margin-top: 0.4rem;
   padding: 0 0.25rem;
 }
 
@@ -408,13 +425,25 @@
   transition: opacity 0.3s ease;
 }
 
-.micButton:hover {
-  transform: scale(1.05) translateY(-2px);
-  box-shadow: 0 20px 40px rgba(13, 148, 136, 0.3);
+@media (hover: hover) {
+  .micButton:hover {
+    transform: scale(1.05) translateY(-2px);
+    box-shadow: 0 20px 40px rgba(249, 115, 22, 0.3);
+  }
+
+  .micButton:hover::before {
+    opacity: 1;
+  }
 }
 
-.micButton:hover::before {
-  opacity: 1;
+.micButton:focus-visible {
+  outline: 3px solid var(--brand-300);
+  outline-offset: 3px;
+}
+
+/* Keeps the icon above the hover gradient overlay. */
+.micButton > svg {
+  position: relative;
 }
 
 .micButton:active {
@@ -492,7 +521,7 @@
 
 .fieldTriggerOpen {
   border-color: var(--primary-blue);
-  box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.15);
+  box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.15);
 }
 
 .fieldChevron {
@@ -540,7 +569,7 @@
 
 .fieldOptionActive {
   background: var(--brand-50);
-  color: var(--brand-700, #0f766e);
+  color: var(--brand-700, #c2410c);
   font-weight: 600;
 }
 
@@ -559,6 +588,9 @@
 }
 
 .checkboxToggle {
+  width: 100%;
+  min-height: 48px;
+  color: var(--primary-text);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -574,16 +606,26 @@
 }
 
 .checkboxToggle.checked {
-  background: var(--success-bg);
-  border-color: var(--success-green);
-  color: var(--success-text);
+  background: var(--brand-50);
+  border-color: var(--brand-500);
+  color: var(--brand-800);
 }
 
 /* Responsive design */
 @media (max-width: 768px) {
+  /* The page container already supplies the side gutter on phones — a second
+     one here only narrows the content and adds height. */
   .wrapper {
-    padding: 0.6rem;
+    padding: 0.25rem 0;
     gap: 0.5rem;
+  }
+
+  .scopeBar {
+    padding: 0.45rem 0.6rem;
+  }
+
+  .scopeBarControls {
+    gap: 0.4rem;
   }
 
   .targetBox {
@@ -596,8 +638,12 @@
   }
 
   .micButton {
-    width: 64px;
-    height: 64px;
+    width: 60px;
+    height: 60px;
+  }
+
+  .fieldNavBtn.fieldNavBtn {
+    min-width: 6.5rem;
   }
 
   /* iOS Safari zooms the page in when an input under 16px is focused, which
@@ -606,4 +652,32 @@
   .commentInput {
     font-size: 16px;
   }
+}
+
+/* Theme: on this screen a chosen answer reads as "selected" (orange on pale
+   pink), not as a success message, and 保存 / はい（保存する） are the screen's
+   primary actions, so they use the primary orange. Saved/failed status
+   alerts keep their green/red meaning colors. */
+.targetBox :global(.badge.bg-success) {
+  background-color: var(--brand-500) !important;
+}
+
+.targetBox :global(.text-success) {
+  color: var(--brand-700) !important;
+}
+
+.wrapper :global(.btn-success) {
+  --bs-btn-color: #fff;
+  --bs-btn-bg: var(--brand-500);
+  --bs-btn-border-color: var(--brand-500);
+  --bs-btn-hover-color: #fff;
+  --bs-btn-hover-bg: var(--brand-600);
+  --bs-btn-hover-border-color: var(--brand-600);
+  --bs-btn-focus-shadow-rgb: 249, 115, 22;
+  --bs-btn-active-color: #fff;
+  --bs-btn-active-bg: var(--brand-700);
+  --bs-btn-active-border-color: var(--brand-700);
+  --bs-btn-disabled-color: #fff;
+  --bs-btn-disabled-bg: var(--brand-300);
+  --bs-btn-disabled-border-color: var(--brand-300);
 }
