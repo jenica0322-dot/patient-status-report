@@ -213,3 +213,39 @@
   opacity: 1;
   margin: 0.5rem 0;
 }
+
+/* Phone menu (offcanvas) only — larger text and icons for easier reading
+   and tapping. The desktop sidebar keeps its own sizes. */
+.offcanvas :global(.offcanvas-title) {
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.offcanvas .avatar {
+  width: 64px;
+  height: 64px;
+  font-size: 1.75rem;
+}
+
+.offcanvas .employeeName {
+  font-size: 20px;
+}
+
+.offcanvas .patientCard {
+  font-size: 18px;
+  padding: 0.75rem;
+}
+
+.offcanvas .sidebarButton {
+  padding: 0.8rem 0.9rem;
+}
+
+.offcanvas .buttonText {
+  font-size: 20px;
+}
+
+.offcanvas .sidebarButton svg {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+}

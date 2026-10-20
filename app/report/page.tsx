@@ -331,7 +331,7 @@ export default function ReportPage() {
                   記録月
                 </Form.Label>
                 <JaMonthInput
-                  className={`form-control ${styles.toolbarText}`}
+                  className={`form-control ${styles.toolbarText} ${styles.monthText}`}
                   value={yearMonth}
                   onChange={setYearMonth}
                 />
