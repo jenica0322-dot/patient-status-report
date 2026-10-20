@@ -183,7 +183,7 @@ export default function RegisterFields() {
                       key={s.key}
                       variant={form.screen_key === s.key ? "primary" : "outline-primary"}
                       onClick={() => handleScreenChange(s.key)}
-                      style={{ fontSize: 22 }}
+                      style={{ fontSize: 18 }}
                     >
                       {s.label}
                     </Button>
@@ -194,7 +194,7 @@ export default function RegisterFields() {
               <Row>
                 <Col md={7}>
                   <Card className="mb-3 mb-md-0">
-                    <Card.Header style={{ fontSize: 22 }}>
+                    <Card.Header style={{ fontSize: 18 }}>
                       <Database className="me-2" />
                       フィールド情報
                     </Card.Header>
@@ -305,7 +305,7 @@ export default function RegisterFields() {
                             variant="primary"
                             size="lg"
                             onClick={handleSave}
-                            style={{ fontSize: 22 }}
+                            style={{ fontSize: 20 }}
                             disabled={loading}
                           >
                             {loading ? (
@@ -328,7 +328,7 @@ export default function RegisterFields() {
 
                 <Col md={5}>
                   <Card>
-                    <Card.Header style={{ fontSize: 22 }}>
+                    <Card.Header style={{ fontSize: 18 }}>
                       <List className="me-2" />
                       登録済みフィールド ({fields.length})
                     </Card.Header>

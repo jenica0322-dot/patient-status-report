@@ -246,13 +246,18 @@
   row-gap: 0.5rem;
 }
 
-/* 利用者 name, 記録月, and the 写真を見る / Excel印刷 / PDF印刷 buttons — 22px.
+/* 利用者 name, 記録月, and the 写真を見る / Excel印刷 / PDF印刷 buttons — 18px.
    Doubled class beats Bootstrap's .form-control / .btn-sm font sizes. */
 .toolbarText.toolbarText {
-  font-size: 22px;
+  font-size: 18px;
   /* Tighter padding so the larger text doesn't make the controls bulky. */
   line-height: 1.3;
   padding: 0.2rem 0.6rem;
+}
+
+/* 記録月 month box — 16px, smaller than the rest of the toolbar text. */
+.monthText.monthText.monthText {
+  font-size: 16px;
 }
 
 /* Toolbar card itself: less padding around the controls. */
@@ -278,6 +283,36 @@
 
   .toolbarActions {
     justify-content: flex-start !important;
+    /* 写真を見る / Excel印刷 / PDF印刷 stay on one straight line instead of
+       wrapping. On narrow cards the text scales down with the card width
+       (up to the usual 18px) so all three fit; a button can only clip its
+       own text as a last resort on very small screens, never overflow. */
+    flex-wrap: nowrap;
+    column-gap: 0.35rem;
+  }
+
+  .toolbarActions .toolbarText.toolbarText {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: clamp(12px, 4cqi, 18px);
+    padding-left: 0.4rem;
+    padding-right: 0.4rem;
+  }
+}
+
+/* Phone-width cards: the buttons' small icons are dropped so the text can
+   stay larger (about 15px) while all three still fit on one line. */
+@container (max-width: 480px) {
+  .toolbarActions .toolbarText.toolbarText {
+    font-size: clamp(14px, 4.6cqi, 18px);
+    padding-left: 0.35rem;
+    padding-right: 0.35rem;
+  }
+
+  .toolbarActions .toolbarText svg {
+    display: none;
   }
 }
 
