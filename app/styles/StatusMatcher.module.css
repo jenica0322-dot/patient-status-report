@@ -220,7 +220,7 @@
    targets. Row height and text scale with the screen height (clamped), so the
    longest list (体調, 5 rows) always fits on screen without scrolling. */
 .choiceTitle {
-  font-size: 1rem;
+  font-size: 20px;
   font-weight: 700;
 }
 
@@ -284,7 +284,7 @@
 }
 
 .choiceLabel {
-  font-size: clamp(1.1rem, 2.7vh, 1.45rem);
+  font-size: 20px;
   font-weight: 700;
   line-height: 1.2;
 }
@@ -651,5 +651,120 @@
   .wrapper :global(.form-control),
   .commentInput {
     font-size: 16px;
+  }
+}
+
+/* ---------- Choice list polish (うけとり / 食べ残し / 体調) ----------
+   Rows keep their compact one-line layout; they just get a rounded hover
+   highlight and evenly sized round markers instead of uneven pills.
+   Bootstrap's px-0/py-0/bg-transparent utilities carry !important, hence
+   the !important here. The nested follow-up rows keep their ps-4 indent. */
+.targetBox :global(.list-group) {
+  gap: 2px;
+}
+
+.targetBox :global(.list-group-item-action) {
+  border-radius: 10px;
+  padding-top: 0.15rem !important;
+  padding-bottom: 0.15rem !important;
+  padding-right: 0.4rem !important;
+  transition: background-color 0.15s ease;
+}
+
+.targetBox :global(.list-group-item-action:not(.ps-4)) {
+  padding-left: 0.4rem !important;
+}
+
+@media (hover: hover) {
+  .targetBox :global(.list-group-item-action:hover) {
+    background-color: var(--accent-bg) !important;
+  }
+}
+
+.targetBox :global(.list-group-item .badge),
+.choiceTitle :global(.badge) {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0;
+  border-radius: 50% !important;
+  font-size: 0.8rem;
+  line-height: 1;
+}
+
+.transcriptBox {
+  box-shadow: var(--shadow-sm);
+}
+
+/* ---------- Fit on one screen ----------
+   Shorter screens (most laptops, phones) tighten spacing and the mic size so
+   the whole flow, toolbar to mic, stays in view without page scrolling.
+   Text sizes are left as they are. */
+@media (max-height: 820px) {
+  .wrapper {
+    gap: 0.45rem;
+    padding-top: 0.4rem;
+    padding-bottom: 0.4rem;
+  }
+
+  .scopeBar {
+    padding: 0.4rem 0.6rem;
+  }
+
+  .targetBox {
+    padding: 0.5rem;
+  }
+
+  .targetBox :global(.card-body) {
+    padding: 0.4rem 0.5rem;
+  }
+
+  .fieldNav {
+    margin-top: 0.3rem;
+  }
+
+  .fieldNavBtn.fieldNavBtn {
+    padding-top: 0.25rem;
+    padding-bottom: 0.25rem;
+  }
+
+  .commentBox {
+    padding: 0.35rem 0.6rem 0.45rem;
+  }
+
+  .commentLabel {
+    margin-bottom: 0.2rem;
+  }
+
+  .commentInput {
+    min-height: 38px;
+    padding: 0.3rem 0.6rem;
+  }
+
+  .micButton {
+    width: 58px;
+    height: 58px;
+  }
+}
+
+@media (max-height: 700px) {
+  .wrapper {
+    gap: 0.35rem;
+  }
+
+  .scopeBar {
+    padding: 0.3rem 0.5rem;
+  }
+
+  .targetBox :global(.card-body) {
+    padding: 0.3rem 0.45rem;
+  }
+
+  .micButton {
+    width: 52px;
+    height: 52px;
   }
 }

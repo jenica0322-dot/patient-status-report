@@ -246,6 +246,24 @@
   row-gap: 0.5rem;
 }
 
+/* 利用者 name, 記録月, and the 写真を見る / Excel印刷 / PDF印刷 buttons — 22px.
+   Doubled class beats Bootstrap's .form-control / .btn-sm font sizes. */
+.toolbarText.toolbarText {
+  font-size: 22px;
+  /* Tighter padding so the larger text doesn't make the controls bulky. */
+  line-height: 1.3;
+  padding: 0.2rem 0.6rem;
+}
+
+/* Toolbar card itself: less padding around the controls. */
+.toolbarCard :global(.card-body) {
+  padding: 0.6rem 0.9rem;
+}
+
+.toolbarCard :global(.form-label) {
+  margin-bottom: 0.25rem;
+}
+
 @container (max-width: 900px) {
   .toolbarUserCol,
   .toolbarDateCol,
