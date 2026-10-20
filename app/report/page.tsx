@@ -313,7 +313,7 @@ export default function ReportPage() {
               <Col md={5} className={styles.toolbarUserCol}>
                 <Form.Label>利用者</Form.Label>
                 {selectedPatient ? (
-                  <div className="form-control bg-light">
+                  <div className={`form-control bg-light ${styles.toolbarText}`}>
                     {selectedPatient.name}
                   </div>
                 ) : (
@@ -331,7 +331,7 @@ export default function ReportPage() {
                   記録月
                 </Form.Label>
                 <JaMonthInput
-                  className="form-control"
+                  className={`form-control ${styles.toolbarText}`}
                   value={yearMonth}
                   onChange={setYearMonth}
                 />
@@ -342,7 +342,7 @@ export default function ReportPage() {
                     <Button
                       variant="outline-primary"
                       size="sm"
-                      className="text-nowrap"
+                      className={`text-nowrap ${styles.toolbarText}`}
                       onClick={() => setShowGallery(true)}
                       disabled={reportPhotos.length === 0}
                     >
@@ -350,14 +350,14 @@ export default function ReportPage() {
                       写真を見る{reportPhotos.length > 0 ? `（${reportPhotos.length}）` : ""}
                     </Button>
                     <a
-                      className="btn btn-success btn-sm text-nowrap"
+                      className={`btn btn-success btn-sm text-nowrap ${styles.toolbarText}`}
                       href={patientReportExportUrl(patientId, yearMonth)}
                     >
                       <FileEarmarkExcel className="me-1" />
                       Excel印刷
                     </a>
                     <a
-                      className="btn btn-danger btn-sm text-nowrap"
+                      className={`btn btn-danger btn-sm text-nowrap ${styles.toolbarText}`}
                       href={patientReportExportPdfUrl(patientId, yearMonth)}
                     >
                       <FileEarmarkPdf className="me-1" />

@@ -228,6 +228,15 @@ const GROUP_TARGET_FIELDS: GroupTargetField[] = [
   },
 ];
 
+// Heading shown above each Target Field's choice list. Display only — the
+// field_label itself is unchanged, since the voice-over speaks it and spoken
+// field names are matched against it.
+const CHOICE_HEADINGS: Record<string, string> = {
+  uketori: "うけとり状況を選択",
+  __tabenokoshi: "食べ残し状況を選択",
+  __taicho: "体調を選択（複数選択可）",
+};
+
 // Target Field dropdown entries: only うけとり and the picker-only group fields
 // (食べ残し / 体調), each group placed where its first column sits.
 function buildPickerFields(fields: Field[]): (Field | GroupTargetField)[] {
@@ -382,7 +391,7 @@ export default function StatusMatcher() {
   const [values, setValues] = useState<Record<string, { value?: any; comment?: string }>>({});
   const [isListening, setIsListening] = useState(false);
   const [transcript, setTranscript] = useState("");
-  const [statusMsg, setStatusMsg] = useState("");
+  const [, setStatusMsg] = useState("");
   const [matchStatus, setMatchStatus] = useState<"none" | "match" | "no-match">("none");
   const [matches, setMatches] = useState<Match[]>([]);
   const [manualText, setManualText] = useState("");
@@ -417,7 +426,7 @@ export default function StatusMatcher() {
   const valuesRef = useRef<Record<string, { value?: any; comment?: string }>>({});
   const patientFieldVoiceKeyRef = useRef<string | null>(null);
   // A long-lived recognition session's onresult closure can outlive several renders
-  // (see createRecognition/restartRecognition), so screenKey must be read through a
+  // (see createRecognition), so screenKey must be read through a
   // ref — same reason focusKey/values are — otherwise a voice-spoken date after
   // switching 日次記録/月次報告 while still listening would apply to the wrong field.
   const screenKeyRef = useRef<string>(screenKey);
@@ -803,27 +812,6 @@ export default function StatusMatcher() {
     }
   };
 
-  // Explicitly retires whatever recognition instance is currently active and
-  // starts a brand-new one — but only once the browser confirms the old session
-  // is actually closed (via its onend), rather than guessing with a timer. Used
-  // after save so voice input can't be left stranded by a session the browser
-  // silently ended out from under us while the save was in flight.
-  const restartRecognition = () => {
-    const old = recognitionRef.current;
-    if (!old) {
-      startFreshRecognition();
-      return;
-    }
-    old.onresult = null;
-    old.onerror = null;
-    old.onend = () => startFreshRecognition();
-    try {
-      old.stop();
-    } catch {
-      startFreshRecognition();
-    }
-  };
-
   const handleStartListening = async () => {
     if (isListeningRef.current || isSearching) return;
     if (!(await canRecordMic())) return;
@@ -982,8 +970,7 @@ export default function StatusMatcher() {
   };
 
   const confirmSaveYes = async () => {
-    // Stopped before saving, so handleSaveRecord's restart-on-save (for the
-    // ordinary manual "保存" command/button) sees the mic off and skips it.
+    // Stopped before saving (handleSaveRecord stops it too; repeating is harmless).
     endVoiceFlow();
     await handleSaveRecord();
   };
@@ -1321,6 +1308,10 @@ export default function StatusMatcher() {
 
   const handleSaveRecord = async () => {
     if (savingRecordRef.current) return;
+    // Saving ends the voice session: stop the mic, recognition and any
+    // voice-over right away (whether 保存 was tapped or spoken), and leave
+    // them off afterwards. The user taps the mic again to resume.
+    endVoiceFlow();
     const patient = selectedPatientRef.current;
     if (!patient) {
       setStatusMsg("❌ 利用者が選択されていません");
@@ -1361,10 +1352,6 @@ export default function StatusMatcher() {
       setMatchStatus("none");
       setTranscript("");
       lastFinalRef.current = "";
-      // Force a clean recognition instance after save so voice input keeps
-      // accepting commands even if the browser silently ended the session
-      // during the save (see createRecognition/restartRecognition above).
-      if (isListeningRef.current) restartRecognition();
     } catch (e) {
       console.error("save failed", e);
       const detail = e instanceof Error ? e.message : "";
@@ -1569,7 +1556,8 @@ export default function StatusMatcher() {
                     <div className="card-body">
                       <h6 className={`card-title d-flex align-items-center mb-1 ${styles.choiceTitle}`}>
                         <span className="badge bg-primary me-2 rounded-pill">🎯</span>
-                        {focusGroupField.field_label} の候補（{focusGroupField.multiple ? "複数選択可" : "クリックで選択"}）
+                        {CHOICE_HEADINGS[focusGroupField.field_key] ??
+                          `${focusGroupField.field_label} の候補（${focusGroupField.multiple ? "複数選択可" : "クリックで選択"}）`}
                       </h6>
                       <div className="list-group list-group-flush">
                         {focusGroupField.options.map((o) => {
@@ -1651,7 +1639,8 @@ export default function StatusMatcher() {
                     <div className="card-body">
                       <h6 className={`card-title d-flex align-items-center mb-1 ${styles.choiceTitle}`}>
                         <span className="badge bg-primary me-2 rounded-pill">🎯</span>
-                        {focusField.field_label} の候補（クリックで選択、{presetOptions.length}件）
+                        {CHOICE_HEADINGS[focusField.field_key] ??
+                          `${focusField.field_label} の候補（クリックで選択、${presetOptions.length}件）`}
                       </h6>
                       <div className="list-group list-group-flush">
                         {presetOptions.map((p) => {
@@ -1761,15 +1750,8 @@ export default function StatusMatcher() {
           <p>{transcript}</p>
         </div>
       )}
-      {statusMsg && (
-        <div
-          className={`alert ${
-            statusMsg.includes("✅") ? "alert-success" : statusMsg.includes("❌") ? "alert-danger" : "alert-info"
-          } rounded-4 shadow-sm border-0`}
-        >
-          {statusMsg}
-        </div>
-      )}
+      {/* The status message bar is hidden from view. statusMsg is still set
+          everywhere as before; it just isn't displayed. */}
 
       {awaitingSaveConfirm && (
         <div className="d-flex gap-2 justify-content-center">

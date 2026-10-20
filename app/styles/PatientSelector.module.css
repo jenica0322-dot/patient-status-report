@@ -287,3 +287,16 @@
 .loadMore:hover {
   border-color: var(--primary-blue-hover);
 }
+
+/* Shorter screens: a little less padding around the 対象利用者 picker so the
+   Status Input screen fits without scrolling. Text size is unchanged. */
+@media (max-height: 820px) {
+  .label {
+    margin-bottom: 0.2rem;
+  }
+
+  .trigger {
+    padding-top: 0.35rem;
+    padding-bottom: 0.35rem;
+  }
+}
