@@ -48,7 +48,7 @@ export default function LoginForm() {
         <h3 className={styles.title}>ログイン</h3>
         <p className={styles.subtitle}>状況記録表兼報告書へようこそ</p>
 
-        <Form onSubmit={handleSubmit} suppressHydrationWarning>
+        <Form onSubmit={handleSubmit} autoComplete="off" suppressHydrationWarning>
           {error && (
             <Alert variant="danger" className="py-2" role="alert">
               {error}
@@ -63,10 +63,11 @@ export default function LoginForm() {
               </InputGroup.Text>
               <Form.Control
                 type="text"
-                placeholder="ユーザー名を入力してください (例: admin)"
+                placeholder="ユーザー名を入力してください"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                autoComplete="username"
+                // Blank by default: keep the browser from pre-filling a saved username.
+                autoComplete="off"
                 autoCapitalize="none"
                 autoCorrect="off"
                 required
@@ -86,7 +87,10 @@ export default function LoginForm() {
                 placeholder="パスワードを入力してください"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                autoComplete="current-password"
+                // "new-password" is the value browsers honor for not auto-filling a
+                // saved login (they ignore "off" on password fields, and filling the
+                // password would fill the username along with it).
+                autoComplete="new-password"
                 required
                 suppressHydrationWarning
               />
