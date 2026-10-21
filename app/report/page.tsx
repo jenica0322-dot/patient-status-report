@@ -313,7 +313,7 @@ export default function ReportPage() {
               <Col md={5} className={styles.toolbarUserCol}>
                 <Form.Label>利用者</Form.Label>
                 {selectedPatient ? (
-                  <div className={`form-control bg-light ${styles.toolbarText}`}>
+                  <div className={`form-control bg-light fw-bold ${styles.toolbarText}`}>
                     {selectedPatient.name}
                   </div>
                 ) : (
