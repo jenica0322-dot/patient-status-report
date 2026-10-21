@@ -6,10 +6,12 @@ import { useState } from "react";
 import { Form, Button, Alert, InputGroup, Spinner } from "react-bootstrap";
 import { ClipboardHeart, EyeFill, EyeSlashFill, PersonFill, KeyFill } from "react-bootstrap-icons";
 import { useAuth } from "@/app/context/AuthContext";
+import { usePatient } from "@/app/context/PatientContext";
 import styles from "@/app/styles/LoginForm.module.css";
 
 export default function LoginForm() {
   const { login } = useAuth();
+  const { clearPatient } = usePatient();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -20,6 +22,9 @@ export default function LoginForm() {
     e.preventDefault();
     setError("");
     setSubmitting(true);
+    // Every login starts with 対象利用者 blank: drop any patient left over
+    // from a previous session before the Status Input screen appears.
+    clearPatient();
 
     try {
       const success = await login(username, password);
