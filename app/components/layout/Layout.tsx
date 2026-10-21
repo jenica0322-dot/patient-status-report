@@ -60,7 +60,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   const [isInstallable, setIsInstallable] = useState(false);
 
   const { user, logout } = useAuth();
-  const { selectedPatient } = usePatient();
+  const { selectedPatient, clearPatient } = usePatient();
   const isDesktop = useIsDesktop("(min-width: 768px)");
   const pathname = usePathname();
   const router = useRouter();
@@ -122,10 +122,13 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     setIsInstallable(false);
   };
 
+  // Logging out also forgets the selected 対象利用者, so the next login
+  // starts with it blank.
   const handleLogout = useCallback(() => {
+    clearPatient();
     logout();
     router.push("/");
-  }, [logout, router]);
+  }, [clearPatient, logout, router]);
 
   const employeeName = user?.username || "Guest";
   const patientName = selectedPatient?.name || null;
