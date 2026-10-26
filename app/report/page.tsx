@@ -19,6 +19,7 @@ import {
   StatusPhoto,
 } from "../lib/statusApi";
 import PhotoLightbox from "../components/dashboard/PhotoLightbox";
+import { markVoiceFlowResume } from "../lib/voiceFlowResume";
 import galleryStyles from "../styles/PhotoGallery.module.css";
 import {
   ReportField,
@@ -43,6 +44,25 @@ const PATIENT_SELECT_FIELD_LABEL = "利用者選択";
 function currentYearMonth() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+// 'YYYY/MM/DD HH:mm' in Japan time — matches the stamp burned into the image
+// by server/lib/photoTimestamp.js.
+function formatPhotoTimestamp(iso: string) {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Tokyo",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    })
+      .formatToParts(new Date(iso))
+      .map((p) => [p.type, p.value])
+  );
+  return `${parts.year}/${parts.month}/${parts.day} ${parts.hour}:${parts.minute}`;
 }
 
 function Checklist({ field, value }: { field: ReportField | undefined; value: any }) {
@@ -89,6 +109,12 @@ export default function ReportPage() {
   const [showGallery, setShowGallery] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [deletingPhotoId, setDeletingPhotoId] = useState<number | null>(null);
+
+  // Going back to 状況入力 after reviewing this report restarts its Target
+  // Field voice-over (see StatusMatcher).
+  useEffect(() => {
+    markVoiceFlowResume();
+  }, []);
 
   useEffect(() => {
     fetchStatusFields("daily_status").then(setDailyFields).catch(() => {});
@@ -647,6 +673,9 @@ export default function ReportPage() {
                     >
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img src={photo.url} alt={photo.original_filename || "写真"} loading="lazy" decoding="async" />
+                      {photo.created_at && (
+                        <span className={galleryStyles.galleryThumbTime}>{formatPhotoTimestamp(photo.created_at)}</span>
+                      )}
                       <button
                         type="button"
                         className={galleryStyles.galleryThumbDelete}

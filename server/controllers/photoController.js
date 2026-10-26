@@ -1,4 +1,5 @@
 const pool = require('../db/db');
+const { stampPhoto } = require('../lib/photoTimestamp');
 
 // Finds the status_records row for this patient+day (or patient+month), creating
 // an empty one if it doesn't exist yet — photos can be attached before the user
@@ -60,14 +61,28 @@ const uploadPhotos = async (req, res) => {
     // so the View section always shows just the latest. If several files are
     // submitted in one request, only the last one is kept.
     const file = files[files.length - 1];
+
+    // Burn the upload date/time into the image itself before it is stored.
+    // The same instant is stored as created_at so the gallery caption always
+    // matches the stamp on the image.
+    const stampedAt = new Date();
+    let stamped;
+    try {
+      stamped = await stampPhoto(file.buffer, stampedAt);
+    } catch (e) {
+      console.error("stampPhoto error:", e);
+      return res.status(400).json({ error: "unsupported image format", detail: e.message });
+    }
+    const filename = (file.originalname || "photo").replace(/\.[^./\\]*$/, "") + ".jpg";
+
     const photo = await pool.tx(async (client) => {
       await client.query(`DELETE FROM status_record_photos WHERE status_record_id = $1`, [recordId]);
       const result = await client.query(
         `INSERT INTO status_record_photos
-           (status_record_id, patient_id, mime_type, original_filename, file_size, file_data)
-         VALUES ($1,$2,$3,$4,$5,$6)
+           (status_record_id, patient_id, mime_type, original_filename, file_size, file_data, created_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7)
          RETURNING id, original_filename, created_at`,
-        [recordId, patient_id, file.mimetype, file.originalname, file.size, file.buffer]
+        [recordId, patient_id, stamped.mimetype, filename, stamped.buffer.length, stamped.buffer, stampedAt]
       );
       return toPhotoDto(result.rows[0]);
     });

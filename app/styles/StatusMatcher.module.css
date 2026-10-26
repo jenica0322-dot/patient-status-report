@@ -228,6 +228,10 @@
 .choiceTitle {
   font-size: 20px;
   font-weight: 700;
+  /* One line on every screen so the heading height never changes. */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* The choice card sits inside .targetBox, which already has its own padding —
@@ -293,22 +297,6 @@
   font-size: 20px;
   font-weight: 700;
   line-height: 1.2;
-}
-
-/* 戻る / 次へ — steps between Target Fields, below the candidate list */
-.fieldNav {
-  display: flex;
-  justify-content: space-between;
-  gap: 0.75rem;
-  margin-top: 0.4rem;
-  padding: 0 0.25rem;
-}
-
-.fieldNavBtn.fieldNavBtn {
-  min-width: 7.5rem;
-  font-size: 18px;
-  font-weight: 700;
-  border-radius: 8px;
 }
 
 /* コメント（自由入力） — its own card below the Target Field panel */
@@ -562,8 +550,9 @@
 
 .fieldOption {
   width: 100%;
+  min-height: 44px;
   text-align: left;
-  padding: 0.3rem 0.55rem;
+  padding: 0.5rem 0.75rem;
   border-radius: 8px;
   border: none;
   background: transparent;
@@ -651,10 +640,6 @@
     height: 68px;
   }
 
-  .fieldNavBtn.fieldNavBtn {
-    min-width: 6.5rem;
-  }
-
   /* iOS Safari zooms the page in when an input under 16px is focused, which
      leaves it zoomed and scrolling sideways — keep text inputs at 16px here. */
   .wrapper :global(.form-control),
@@ -664,29 +649,63 @@
 }
 
 /* ---------- Choice list polish (うけとり / 食べ残し / 体調) ----------
-   Rows keep their compact one-line layout; they just get a rounded hover
-   highlight and evenly sized round markers instead of uneven pills.
-   Bootstrap's px-0/py-0/bg-transparent utilities carry !important, hence
-   the !important here. The nested follow-up rows keep their ps-4 indent. */
+   Each option is a full-width tile: the whole row (marker + label) is the
+   tap target, with a visible border so it reads as one big button rather
+   than a small dot next to text. Bootstrap's px-0/py-0/border-0/
+   bg-transparent utilities carry !important, hence the !important here.
+   Nested follow-up rows stay indented via their ps-4 class. */
 .targetBox :global(.list-group) {
-  gap: 2px;
+  gap: 0.45rem;
+  /* Always as tall as the longest choice list (体調's 5 options), so moving
+     between うけとり / 食べ残し / 体調 never shifts the comment box or mic. */
+  min-height: calc(5 * 52px + 4 * 0.45rem);
+  align-content: flex-start;
+  justify-content: flex-start;
+}
+
+/* Everything under 対象利用者 — the choice card, or a checkbox/text input on
+   other steps — reserves the choice card's full height (title + 5 options +
+   padding), so the panel and everything below it never move between steps. */
+.choiceArea {
+  min-height: calc(5 * 52px + 4 * 0.45rem + 30px + 0.25rem + 1rem + 0.25rem + 2px);
 }
 
 .targetBox :global(.list-group-item-action) {
-  border-radius: 10px;
-  padding-top: 0.15rem !important;
-  padding-bottom: 0.15rem !important;
-  padding-right: 0.4rem !important;
-  transition: background-color 0.15s ease;
+  width: 100%;
+  min-height: 52px;
+  border-radius: 12px !important;
+  border: 2px solid var(--border-color) !important;
+  background-color: var(--card-bg, #fff) !important;
+  padding: 0.5rem 0.75rem !important;
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
 }
 
-.targetBox :global(.list-group-item-action:not(.ps-4)) {
-  padding-left: 0.4rem !important;
+/* Follow-up choices (e.g. under 体調他) sit indented under their parent. */
+.targetBox :global(.list-group-item-action.ps-4) {
+  width: calc(100% - 1.5rem);
+  margin-left: 1.5rem;
+}
+
+.targetBox :global(.list-group-item-action:active) {
+  transform: scale(0.98);
+  background-color: var(--accent-bg) !important;
+}
+
+.targetBox .choiceOptionSelected {
+  border-color: var(--success-green) !important;
+  background-color: var(--success-bg) !important;
 }
 
 @media (hover: hover) {
   .targetBox :global(.list-group-item-action:hover) {
     background-color: var(--accent-bg) !important;
+  }
+
+  .targetBox .choiceOptionSelected:hover {
+    background-color: var(--success-bg) !important;
   }
 }
 
@@ -696,11 +715,11 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 1.75rem;
-  height: 1.75rem;
+  width: 2rem;
+  height: 2rem;
   padding: 0;
   border-radius: 50% !important;
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   line-height: 1;
 }
 
@@ -729,15 +748,6 @@
 
   .targetBox :global(.card-body) {
     padding: 0.4rem 0.5rem;
-  }
-
-  .fieldNav {
-    margin-top: 0.3rem;
-  }
-
-  .fieldNavBtn.fieldNavBtn {
-    padding-top: 0.25rem;
-    padding-bottom: 0.25rem;
   }
 
   .commentBox {

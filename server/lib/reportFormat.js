@@ -32,6 +32,7 @@ const FIELD_GROUP = {
   kanshoku: "食事",
   hanbun: "食事",
   nokoshi: "食事",
+  mondai_nashi: "食事",
   shokuyoku_teika: "体調",
   kaoiro_genki: "体調",
   furatsuki: "体調",
