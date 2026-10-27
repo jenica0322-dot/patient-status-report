@@ -1476,103 +1476,105 @@ export default function StatusMatcher() {
 
   return (
     <div className={styles.wrapper}>
-      {selectedPatient && (
-        <div className={styles.scopeBar}>
-          <div className={styles.scopeBarControls}>
-            <div className="d-flex gap-2">
-              {SCREENS.map((s) => (
-                <button
-                  key={s.key}
-                  type="button"
-                  // 月次報告 is hidden from view; its screen and logic are left as they are.
-                  hidden={s.key === "monthly_report"}
-                  className={`btn btn-sm ${styles.toolbarBtn} ${screenKey === s.key ? "btn-primary" : "btn-outline-primary"}`}
-                  onClick={() => setScreenKey(s.key)}
-                >
-                  {s.label}
-                </button>
-              ))}
-            </div>
-            {screenKey === "daily_status" ? (
-              <JaDateInput
-                className={`form-control form-control-sm ${styles.toolbarBtn}`}
-                maxWidth={250}
-                value={recordDate}
-                onChange={setRecordDate}
-              />
-            ) : (
-              <JaMonthInput
-                className="form-control form-control-sm"
-                value={yearMonth}
-                onChange={setYearMonth}
-              />
-            )}
-            <button
-              type="button"
-              className={`btn btn-sm btn-outline-primary ${styles.photoUploadBtn} ${styles.toolbarBtn}`}
-              onClick={handlePhotoButtonClick}
-            >
-              <CameraFill size="1em" />
-              <span>写真追加</span>
-            </button>
-            <input
-              ref={photoInputRef}
-              type="file"
-              accept="image/*"
-              className="d-none"
-              onChange={(e) => handlePhotoFilesSelected(e.target.files)}
-            />
-            <button
-              type="button"
-              className={`btn btn-sm btn-outline-primary ${styles.photoUploadBtn} ${styles.toolbarBtn}`}
-              onClick={() => setQrOpen(true)}
-              disabled={isSearching}
-            >
-              <QrCodeScan size="1em" />
-              <span>QR読取</span>
-            </button>
-            {allTargetFieldsAnswered && (
+      {/* Always shown so QR読取 is available right after login; the rest
+          of the toolbar only applies once a patient is selected. */}
+      <div className={styles.scopeBar}>
+        <div className={styles.scopeBarControls}>
+          {selectedPatient && (<>
+          <div className="d-flex gap-2">
+            {SCREENS.map((s) => (
               <button
+                key={s.key}
                 type="button"
-                className={`btn btn-success ms-auto px-4 fw-bold ${styles.toolbarBtn}`}
-                onClick={handleSaveRecord}
-                disabled={savingRecord}
-                aria-busy={savingRecord}
+                // 月次報告 is hidden from view; its screen and logic are left as they are.
+                hidden={s.key === "monthly_report"}
+                className={`btn btn-sm ${styles.toolbarBtn} ${screenKey === s.key ? "btn-primary" : "btn-outline-primary"}`}
+                onClick={() => setScreenKey(s.key)}
               >
-                {savingRecord && <Spinner key="saving-spinner" className="me-1" animation="border" size="sm" />}
-                <span>{savingRecord ? "保存中…" : "保存"}</span>
+                {s.label}
               </button>
-            )}
+            ))}
           </div>
-
-          {pendingDisplay.length > 0 && (
-            <div className={styles.photoStrip}>
-              {pendingDisplay.map((photo, i) => (
-                <div
-                  key={photo.id}
-                  className={`${styles.photoThumb} ${styles.photoThumbPending}`}
-                  onClick={() => setLightboxIndex(i)}
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={photo.url} alt={photo.original_filename || "写真"} />
-                  <span className={styles.photoThumbPendingBadge}>未保存</span>
-                  <button
-                    type="button"
-                    className={styles.photoThumbDelete}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleRemovePendingPhoto(photo);
-                    }}
-                    title="削除"
-                  >
-                    <Trash size={11} />
-                  </button>
-                </div>
-              ))}
-            </div>
+          {screenKey === "daily_status" ? (
+            <JaDateInput
+              className={`form-control form-control-sm ${styles.toolbarBtn}`}
+              maxWidth={250}
+              value={recordDate}
+              onChange={setRecordDate}
+            />
+          ) : (
+            <JaMonthInput
+              className="form-control form-control-sm"
+              value={yearMonth}
+              onChange={setYearMonth}
+            />
+          )}
+          <button
+            type="button"
+            className={`btn btn-sm btn-outline-primary ${styles.photoUploadBtn} ${styles.toolbarBtn}`}
+            onClick={handlePhotoButtonClick}
+          >
+            <CameraFill size="1em" />
+            <span>写真追加</span>
+          </button>
+          <input
+            ref={photoInputRef}
+            type="file"
+            accept="image/*"
+            className="d-none"
+            onChange={(e) => handlePhotoFilesSelected(e.target.files)}
+          />
+          </>)}
+          <button
+            type="button"
+            className={`btn btn-sm btn-outline-primary ${styles.photoUploadBtn} ${styles.toolbarBtn}`}
+            onClick={() => setQrOpen(true)}
+            disabled={isSearching}
+          >
+            <QrCodeScan size="1em" />
+            <span>QR読取</span>
+          </button>
+          {selectedPatient && allTargetFieldsAnswered && (
+            <button
+              type="button"
+              className={`btn btn-success ms-auto px-4 fw-bold ${styles.toolbarBtn}`}
+              onClick={handleSaveRecord}
+              disabled={savingRecord}
+              aria-busy={savingRecord}
+            >
+              {savingRecord && <Spinner key="saving-spinner" className="me-1" animation="border" size="sm" />}
+              <span>{savingRecord ? "保存中…" : "保存"}</span>
+            </button>
           )}
         </div>
-      )}
+
+        {selectedPatient && pendingDisplay.length > 0 && (
+          <div className={styles.photoStrip}>
+            {pendingDisplay.map((photo, i) => (
+              <div
+                key={photo.id}
+                className={`${styles.photoThumb} ${styles.photoThumbPending}`}
+                onClick={() => setLightboxIndex(i)}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={photo.url} alt={photo.original_filename || "写真"} />
+                <span className={styles.photoThumbPendingBadge}>未保存</span>
+                <button
+                  type="button"
+                  className={styles.photoThumbDelete}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleRemovePendingPhoto(photo);
+                  }}
+                  title="削除"
+                >
+                  <Trash size={11} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       {cameraOpen && (
         <CameraCapture
@@ -1624,7 +1626,7 @@ export default function StatusMatcher() {
             マイクで利用者名・ふりがな・pat_id を話すか、上のリストから選択してください。
           </p>
         ) : (
-          <div style={{ marginTop: "0.5rem" }}>
+          <div className={styles.choiceWrap}>
             {/* The 対象フィールド dropdown is hidden from view. The active Target
                 Field (focusKey) is still driven by the voice flow, taps and
                 spoken field names; its own question card is shown below. */}
@@ -1702,7 +1704,7 @@ export default function StatusMatcher() {
                                 <span
                                   className={`badge ${isSelected ? "bg-success" : "bg-light text-dark"} me-2 rounded-pill`}
                                 >
-                                  {isSelected ? "✅" : "・"}
+                                  {isSelected ? "✓" : "・"}
                                 </span>
                                 <span className={`fw-medium ${styles.choiceLabel} ${isSelected ? "text-success" : ""}`}>{o.label}</span>
                               </button>
@@ -1723,7 +1725,7 @@ export default function StatusMatcher() {
                                       <span
                                         className={`badge ${isNextSelected ? "bg-success" : "bg-light text-dark"} me-2 rounded-pill`}
                                       >
-                                        {isNextSelected ? "✅" : "・"}
+                                        {isNextSelected ? "✓" : "・"}
                                       </span>
                                       <span className={`fw-medium ${styles.choiceLabel} ${isNextSelected ? "text-success" : ""}`}>{n.label}</span>
                                     </button>
@@ -1786,7 +1788,7 @@ export default function StatusMatcher() {
                               <span
                                 className={`badge ${isSelected ? "bg-success" : "bg-light text-dark"} me-2 rounded-pill`}
                               >
-                                {isSelected ? "✅" : "・"}
+                                {isSelected ? "✓" : "・"}
                               </span>
                               <span className={`fw-medium ${styles.choiceLabel} ${isSelected ? "text-success" : ""}`}>{p}</span>
                             </button>
