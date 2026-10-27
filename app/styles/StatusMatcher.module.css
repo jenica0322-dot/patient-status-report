@@ -16,6 +16,22 @@
   /* Dense list rows (候補 options, saved-values summary) read smaller than
      the rest of the page's text/labels. */
   --list-fs: 0.72rem;
+  /* Exactly one screen tall under the fixed header (minus <main>'s bottom
+     padding), so the page never scrolls. The 対象利用者 panel flexes to take
+     whatever height is left; everything else keeps its natural size. */
+  height: calc(100vh - var(--header-h, 88px) - 1rem);
+  height: calc(100dvh - var(--header-h, 88px) - 1rem);
+  overflow: hidden;
+}
+
+.wrapper > * {
+  flex-shrink: 0;
+}
+
+/* Belt and braces: no page scroll at all while this screen is mounted. */
+:global(html):has(.wrapper),
+:global(body):has(.wrapper) {
+  overflow: hidden;
 }
 
 /* Bootstrap alerts/cards used as direct children below carry their own default
@@ -188,9 +204,25 @@
   background: var(--primary-bg);
   border: 1px solid var(--border-color);
   border-radius: 14px;
-  padding: 0.6rem;
+  padding: 0.5rem 0.3rem;
   box-shadow: var(--shadow-md);
   transition: box-shadow 0.3s ease;
+}
+
+.wrapper > .targetBox {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Everything under the 対象利用者 picker — fills the rest of the panel. */
+.choiceWrap {
+  margin-top: 0.3rem;
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 /* Hover lift only on devices with a real pointer — on touch screens a tap
@@ -237,7 +269,7 @@
 /* The choice card sits inside .targetBox, which already has its own padding —
    Bootstrap's default 1rem card-body padding on top of that wastes height. */
 .targetBox :global(.card-body) {
-  padding: 0.5rem 0.6rem;
+  padding: 0.3rem 0;
 }
 
 .choiceList.choiceList {
@@ -294,8 +326,9 @@
 }
 
 .choiceLabel {
-  font-size: 20px;
-  font-weight: 700;
+  /* About 60% of the row height, 17–26px. */
+  font-size: clamp(17px, calc(var(--row-h, 52px) * 0.6), 26px);
+  font-weight: 400;
   line-height: 1.2;
 }
 
@@ -627,7 +660,7 @@
   }
 
   .targetBox {
-    padding: 0.5rem;
+    padding: 0.4rem 0.25rem;
   }
 
   .transcriptBox {
@@ -638,6 +671,50 @@
   .micButton {
     width: 68px;
     height: 68px;
+  }
+
+  /* <main> has a smaller bottom padding on phones. */
+  .wrapper {
+    height: calc(100vh - var(--header-h, 80px) - 0.75rem);
+    height: calc(100dvh - var(--header-h, 80px) - 0.75rem);
+  }
+
+  /* Phones: the toolbar wraps to two lines, so slimmer buttons and tighter
+     cards leave the 5 choice rows enough height to stay easy to tap. */
+  .toolbarBtn.toolbarBtn {
+    font-size: 16px;
+    padding-top: 0.2rem;
+    padding-bottom: 0.2rem;
+  }
+
+  .targetBox :global(.card-body) {
+    padding: 0.25rem 0;
+  }
+
+  .targetBox :global(.list-group) {
+    --choice-gap: 0.1rem;
+  }
+
+  .choiceWrap {
+    margin-top: 0.2rem;
+  }
+
+  .choiceTitle {
+    font-size: 17px;
+  }
+
+  .commentBox {
+    padding: 0.3rem 0.5rem 0.4rem;
+  }
+
+  .commentLabel {
+    font-size: 15px;
+    margin-bottom: 0.2rem;
+  }
+
+  .commentInput {
+    min-height: 36px;
+    padding: 0.25rem 0.6rem;
   }
 
   /* iOS Safari zooms the page in when an input under 16px is focused, which
@@ -655,58 +732,115 @@
    bg-transparent utilities carry !important, hence the !important here.
    Nested follow-up rows stay indented via their ps-4 class. */
 .targetBox :global(.list-group) {
-  gap: 0.45rem;
-  /* Always as tall as the longest choice list (体調's 5 options), so moving
-     between うけとり / 食べ残し / 体調 never shifts the comment box or mic. */
-  min-height: calc(5 * 52px + 4 * 0.45rem);
+  --choice-gap: 0.1rem;
+  gap: var(--choice-gap);
   align-content: flex-start;
   justify-content: flex-start;
+  /* Fills the space left in the panel; rows size off this box (cqh) so the
+     longest list (体調's 5 options) always fits without any scrolling. */
+  flex: 1 1 0;
+  min-height: 0;
+  container-type: size;
+  overflow-y: auto;
 }
 
 /* Everything under 対象利用者 — the choice card, or a checkbox/text input on
-   other steps — reserves the choice card's full height (title + 5 options +
-   padding), so the panel and everything below it never move between steps. */
+   other steps — fills the rest of the panel, so the panel and everything
+   below it never move between steps. */
 .choiceArea {
-  min-height: calc(5 * 52px + 4 * 0.45rem + 30px + 0.25rem + 1rem + 0.25rem + 2px);
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.choiceArea > :global(.card) {
+  flex: 1 1 0;
+  min-height: 0;
+  margin-top: 0 !important;
+}
+
+.choiceArea > :global(.card) > :global(.card-body) {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 .targetBox :global(.list-group-item-action) {
   width: 100%;
-  min-height: 52px;
+  flex: 0 0 auto;
+  /* Exactly one fifth of the list's height (5 rows max) so all rows always
+     fit, capped so short lists don't turn into giant tiles. The label and
+     the round marker scale with it (see .choiceLabel and the badge rule). */
+  /* (-1px absorbs sub-pixel rounding so the list never scrolls by a hair.) */
+  --row-h: min(120px, calc((100cqh - 4 * var(--choice-gap) - 1px) / 5));
+  height: var(--row-h);
+  min-height: 0;
   border-radius: 12px !important;
-  border: 2px solid var(--border-color) !important;
-  background-color: var(--card-bg, #fff) !important;
-  padding: 0.5rem 0.75rem !important;
+  border: 2px solid var(--border-color-strong) !important;
+  background-color: var(--primary-bg) !important;
+  color: var(--primary-text);
+  padding: 0 1rem 0 0.75rem !important;
   cursor: pointer;
   user-select: none;
   -webkit-tap-highlight-color: transparent;
-  transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+/* Dark, regular-weight label on white — easy to read at a glance. */
+.targetBox :global(.list-group-item-action) .choiceLabel {
+  font-weight: 400 !important;
+  color: var(--accent-text);
 }
 
 /* Follow-up choices (e.g. under 体調他) sit indented under their parent. */
 .targetBox :global(.list-group-item-action.ps-4) {
-  width: calc(100% - 1.5rem);
-  margin-left: 1.5rem;
+  width: calc(100% - 1.25rem);
+  margin-left: 1.25rem;
+}
+
+.targetBox :global(.list-group-item-action:focus-visible) {
+  outline: 3px solid var(--brand-300);
+  outline-offset: 1px;
 }
 
 .targetBox :global(.list-group-item-action:active) {
-  transform: scale(0.98);
-  background-color: var(--accent-bg) !important;
+  background-color: var(--brand-50) !important;
 }
 
+/* Selected: solid green border, light green fill, dark green text. */
 .targetBox .choiceOptionSelected {
   border-color: var(--success-green) !important;
   background-color: var(--success-bg) !important;
 }
 
+.targetBox .choiceOptionSelected .choiceLabel {
+  color: var(--success-text) !important;
+}
+
 @media (hover: hover) {
   .targetBox :global(.list-group-item-action:hover) {
-    background-color: var(--accent-bg) !important;
+    border-color: var(--brand-500) !important;
   }
 
   .targetBox .choiceOptionSelected:hover {
-    background-color: var(--success-bg) !important;
+    border-color: var(--success-green) !important;
   }
+}
+
+/* Round marker: an empty ring when unpicked (the "・" is hidden), a solid
+   green disc with a white check when picked. */
+.targetBox :global(.list-group-item .badge.bg-light) {
+  background-color: var(--primary-bg) !important;
+  border: 2px solid var(--border-color-strong);
+  color: transparent !important;
+}
+
+.targetBox :global(.list-group-item .badge.bg-success) {
+  background-color: #059669 !important;
+  border: 2px solid #059669;
+  color: #fff;
+  font-weight: 800;
 }
 
 .targetBox :global(.list-group-item .badge),
@@ -715,8 +849,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 2rem;
-  height: 2rem;
+  width: min(2.25rem, calc(var(--row-h, 52px) - 10px));
+  height: min(2.25rem, calc(var(--row-h, 52px) - 10px));
   padding: 0;
   border-radius: 50% !important;
   font-size: 0.9rem;
@@ -743,11 +877,11 @@
   }
 
   .targetBox {
-    padding: 0.5rem;
+    padding: 0.4rem 0.3rem;
   }
 
   .targetBox :global(.card-body) {
-    padding: 0.4rem 0.5rem;
+    padding: 0.25rem 0;
   }
 
   .commentBox {
@@ -779,11 +913,27 @@
   }
 
   .targetBox :global(.card-body) {
-    padding: 0.3rem 0.45rem;
+    padding: 0.2rem 0;
   }
 
   .micButton {
-    width: 60px;
-    height: 60px;
+    width: 56px;
+    height: 56px;
+  }
+
+  .targetBox :global(.list-group) {
+    --choice-gap: 0.1rem;
+  }
+
+  .choiceTitle {
+    font-size: 17px;
+  }
+
+  .commentLabel {
+    font-size: 15px;
+  }
+
+  .commentInput {
+    min-height: 34px;
   }
 }
