@@ -326,8 +326,8 @@
 }
 
 .choiceLabel {
-  /* About 60% of the row height, 17–26px. */
-  font-size: clamp(17px, calc(var(--row-h, 52px) * 0.6), 26px);
+  /* About half the row height, 16–22px. */
+  font-size: clamp(16px, calc(var(--row-h, 52px) * 0.5), 22px);
   font-weight: 400;
   line-height: 1.2;
 }
@@ -780,7 +780,7 @@
   border: 2px solid var(--border-color-strong) !important;
   background-color: var(--primary-bg) !important;
   color: var(--primary-text);
-  padding: 0 1rem 0 0.75rem !important;
+  padding: 0 1rem !important;
   cursor: pointer;
   user-select: none;
   -webkit-tap-highlight-color: transparent;
@@ -828,19 +828,10 @@
   }
 }
 
-/* Round marker: an empty ring when unpicked (the "・" is hidden), a solid
-   green disc with a white check when picked. */
-.targetBox :global(.list-group-item .badge.bg-light) {
-  background-color: var(--primary-bg) !important;
-  border: 2px solid var(--border-color-strong);
-  color: transparent !important;
-}
-
-.targetBox :global(.list-group-item .badge.bg-success) {
-  background-color: #059669 !important;
-  border: 2px solid #059669;
-  color: #fff;
-  font-weight: 800;
+/* No round marker on the option buttons — just the label. A picked option
+   shows by its green border, fill and text instead. */
+.targetBox :global(.list-group-item-action .badge) {
+  display: none !important;
 }
 
 .targetBox :global(.list-group-item .badge),
