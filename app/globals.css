@@ -23,8 +23,8 @@ body {
   --brand-200: #99f6e4;
   --brand-300: #5eead4;
   --brand-400: #2dd4bf;
-  --brand-500: #14b8a6;
-  --brand-600: #0d9488;
+  --brand-500: #0faf9a; /* primary */
+  --brand-600: #0d9488; /* dark teal accent */
   --brand-700: #0f766e;
   --brand-800: #115e59;
   --brand-900: #134e4a;
@@ -32,9 +32,9 @@ body {
   --primary-bg: #ffffff;
   --secondary-bg: #f7fafa;
   --accent-bg: #eef7f6;
-  --app-bg: #f4f8f8;
+  --app-bg: #f3f8f8;
 
-  --primary-text: #1e293b;
+  --primary-text: #334155;
   --secondary-text: #64748b;
   --accent-text: #0f172a;
 
@@ -42,7 +42,9 @@ body {
   --primary-blue-hover: var(--brand-700);
 
   --success-green: #10b981;
-  --success-bg: #ecfdf5;
+  --success-bg: #d1fae5;
+  /* Selected options / active navigation */
+  --selected-bg: #d1fae5;
   --success-text: #065f46;
   --error-red: #ef4444;
   --error-bg: #fef2f2;
@@ -51,8 +53,8 @@ body {
   --warning-bg: #fffbeb;
   --warning-text: #92400e;
 
-  --border-color: #e2e8f0;
-  --border-color-strong: #cbd5e1;
+  --border-color: #dce5ef;
+  --border-color-strong: #c5d3e2;
 
   --radius-sm: 8px;
   --radius-md: 12px;
@@ -64,8 +66,8 @@ body {
   --shadow-lg: 0 12px 24px -6px rgba(15, 23, 42, 0.12);
   --shadow-xl: 0 24px 48px -12px rgba(15, 23, 42, 0.18);
 
-  --gradient-primary: linear-gradient(135deg, var(--brand-500) 0%, var(--brand-700) 100%);
-  --gradient-secondary: linear-gradient(135deg, var(--brand-400) 0%, #0891b2 100%);
+  --gradient-primary: linear-gradient(135deg, var(--brand-500) 0%, var(--brand-600) 100%);
+  --gradient-secondary: linear-gradient(135deg, var(--brand-600) 0%, var(--brand-700) 100%);
 
   --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
 
@@ -160,15 +162,15 @@ a {
 }
 .btn-primary {
   --bs-btn-color: #fff;
-  --bs-btn-bg: var(--brand-600);
-  --bs-btn-border-color: var(--brand-600);
+  --bs-btn-bg: var(--brand-500);
+  --bs-btn-border-color: var(--brand-500);
   --bs-btn-hover-color: #fff;
-  --bs-btn-hover-bg: var(--brand-700);
-  --bs-btn-hover-border-color: var(--brand-700);
-  --bs-btn-focus-shadow-rgb: 13, 148, 136;
+  --bs-btn-hover-bg: var(--brand-600);
+  --bs-btn-hover-border-color: var(--brand-600);
+  --bs-btn-focus-shadow-rgb: 15, 175, 154;
   --bs-btn-active-color: #fff;
-  --bs-btn-active-bg: var(--brand-800);
-  --bs-btn-active-border-color: var(--brand-800);
+  --bs-btn-active-bg: var(--brand-700);
+  --bs-btn-active-border-color: var(--brand-700);
   --bs-btn-disabled-color: #fff;
   --bs-btn-disabled-bg: var(--brand-300);
   --bs-btn-disabled-border-color: var(--brand-300);
@@ -187,23 +189,32 @@ a {
 }
 .btn-outline-primary {
   --bs-btn-color: var(--brand-700);
+  --bs-btn-bg: var(--primary-bg);
   --bs-btn-border-color: var(--brand-500);
   --bs-btn-hover-color: #fff;
-  --bs-btn-hover-bg: var(--brand-600);
-  --bs-btn-hover-border-color: var(--brand-600);
-  --bs-btn-focus-shadow-rgb: 13, 148, 136;
+  --bs-btn-hover-bg: var(--brand-500);
+  --bs-btn-hover-border-color: var(--brand-500);
+  --bs-btn-focus-shadow-rgb: 15, 175, 154;
   --bs-btn-active-color: #fff;
-  --bs-btn-active-bg: var(--brand-700);
-  --bs-btn-active-border-color: var(--brand-700);
+  --bs-btn-active-bg: var(--brand-600);
+  --bs-btn-active-border-color: var(--brand-600);
   --bs-btn-disabled-color: var(--brand-300);
   --bs-btn-disabled-border-color: var(--brand-200);
 }
+/* 保存 and other confirm actions — dark teal, so the main action reads
+   clearly with white text. */
 .btn-success,
 .btn-outline-success:hover {
-  --bs-btn-bg: var(--success-green);
-  --bs-btn-border-color: var(--success-green);
-  --bs-btn-hover-bg: #0ea472;
-  --bs-btn-hover-border-color: #0ea472;
+  --bs-btn-color: #fff;
+  --bs-btn-bg: var(--brand-600);
+  --bs-btn-border-color: var(--brand-600);
+  --bs-btn-hover-color: #fff;
+  --bs-btn-hover-bg: var(--brand-700);
+  --bs-btn-hover-border-color: var(--brand-700);
+  --bs-btn-active-bg: var(--brand-800);
+  --bs-btn-active-border-color: var(--brand-800);
+  --bs-btn-focus-shadow-rgb: 13, 148, 136;
+  box-shadow: var(--shadow-sm);
 }
 .btn-lg {
   border-radius: var(--radius-md);
