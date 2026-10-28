@@ -455,7 +455,7 @@
 @media (hover: hover) {
   .micButton:hover {
     transform: scale(1.05) translateY(-2px);
-    box-shadow: 0 20px 40px rgba(13, 148, 136, 0.3);
+    box-shadow: 0 20px 40px rgba(15, 175, 154, 0.3);
   }
 
   .micButton:hover::before {
@@ -810,8 +810,8 @@
 
 /* Selected: solid green border, light green fill, dark green text. */
 .targetBox .choiceOptionSelected {
-  border-color: var(--success-green) !important;
-  background-color: var(--success-bg) !important;
+  border-color: var(--brand-500) !important;
+  background-color: var(--selected-bg) !important;
 }
 
 .targetBox .choiceOptionSelected .choiceLabel {
@@ -824,7 +824,7 @@
   }
 
   .targetBox .choiceOptionSelected:hover {
-    border-color: var(--success-green) !important;
+    border-color: var(--brand-600) !important;
   }
 }
 
