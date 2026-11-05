@@ -114,7 +114,39 @@ function buildCommentBlocks(monthlyFields) {
   return blocks;
 }
 
+// 報告日 is picked from a calendar on the report screen and stored as
+// 'YYYY-MM-DD'; printed as 'YYYY年M月D日'. Anything else (older free text)
+// prints as it was typed.
+function reportDateText(fieldValue) {
+  const text = textWithComment(fieldValue);
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(rawValue(fieldValue) ?? "").trim());
+  if (!m) return text;
+  const c = rawComment(fieldValue);
+  const date = `${Number(m[1])}年${Number(m[2])}月${Number(m[3])}日`;
+  return c ? `${date}（${c}）` : date;
+}
+
+// One configurable footer item's printed value (see reportLayout.js).
+function footerItemText(item, fieldValue) {
+  if (item.type === "date") return reportDateText(fieldValue);
+  if (item.type === "checklist") return checklistText({ phrases: item.options }, fieldValue);
+  return textWithComment(fieldValue);
+}
+
+// One configurable comment block's printed lines: "①見出し", the ☐/☑ options,
+// and the free-text line when it has one.
+function commentBlockText(block, monthlyValues) {
+  const lines = [`${block.numeral}${block.title}`, checklistText({ phrases: block.options }, monthlyValues[block.fieldKey])];
+  if (block.freeText && block.freeText.enabled) {
+    lines.push(`${block.freeText.label}：${textWithComment(monthlyValues[block.freeText.fieldKey])}`);
+  }
+  return lines.filter(Boolean).join("\n");
+}
+
 module.exports = {
+  reportDateText,
+  footerItemText,
+  commentBlockText,
   TOTAL_COLS,
   PATIENT_SELECT_FIELD_LABEL,
   COLORS,

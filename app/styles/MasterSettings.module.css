@@ -1,0 +1,200 @@
+/* app/styles/MasterSettings.module.css — マスター設定 (report layout) page */
+
+.headerIcon {
+  width: 48px;
+  height: 48px;
+  margin-right: 1rem;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  background: var(--gradient-primary);
+  color: #fff;
+}
+
+/* Save / discard / reset — stays in view while scrolling the item list. */
+.actionBar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  padding: 0.5rem 0.75rem;
+  background: var(--primary-bg, #fff);
+  border: 1px solid var(--border-color, #dee2e6);
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.sectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.itemCard {
+  border: 1px solid var(--border-color, #dee2e6);
+  border-radius: 10px;
+  padding: 0.6rem 0.75rem;
+  background: var(--primary-bg, #fff);
+}
+
+.itemHidden {
+  background: repeating-linear-gradient(-45deg, #f6f7f9, #f6f7f9 8px, #eef0f3 8px, #eef0f3 16px);
+  opacity: 0.75;
+}
+
+.itemHead {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.itemHead > :global(.form-control) {
+  flex: 1 1 180px;
+  min-width: 0;
+}
+
+.numeral {
+  flex: 0 0 auto;
+  width: 2rem;
+  font-size: 1.3rem;
+  font-weight: 700;
+  text-align: center;
+  color: #1f2d4a;
+}
+
+.typeSelect {
+  flex: 0 0 auto;
+  width: auto !important;
+}
+
+.controls {
+  display: flex;
+  gap: 0.25rem;
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  padding: 1px 2px 1px 4px;
+  border: 1px solid var(--border-color-strong, #b9c2cc);
+  border-radius: 999px;
+  background: #f8fafc;
+  font-size: 14px;
+}
+
+.chipLabel {
+  padding: 0 4px;
+  white-space: nowrap;
+}
+
+.chipBtn {
+  border: 0;
+  background: transparent;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #5b6573;
+  padding: 0;
+  line-height: 1;
+}
+
+.chipBtn:hover:not(:disabled) {
+  background: rgba(13, 110, 253, 0.12);
+}
+
+.chipBtn:disabled {
+  opacity: 0.3;
+}
+
+.chipRemove {
+  font-size: 16px;
+  color: #b42318;
+}
+
+.freeTextRow {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-top: 0.6rem;
+}
+
+.freeTextLabel {
+  max-width: 260px;
+}
+
+.keyNote {
+  margin-top: 0.4rem;
+  font-size: 11px;
+  color: var(--secondary-text, #6c757d);
+}
+
+/* ---- Preview ---- */
+.previewCard {
+  position: sticky;
+  top: 4.5rem;
+}
+
+.previewScroll {
+  overflow-x: auto;
+}
+
+.preview {
+  width: 100%;
+  min-width: 420px;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 11px;
+}
+
+.preview th,
+.preview td {
+  border: 1px solid #b9b9b9;
+  padding: 3px 5px;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+
+.previewHead {
+  background: #1f2d4a;
+  color: #fff;
+  font-weight: 600;
+  text-align: center;
+  vertical-align: middle !important;
+}
+
+.previewTally {
+  background: #f3f4f6;
+  height: 16px;
+}
+
+.previewBlock {
+  background: #fff;
+}
+
+@media (max-width: 1199.98px) {
+  .previewCard {
+    position: static;
+  }
+}

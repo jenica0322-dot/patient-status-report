@@ -330,3 +330,174 @@
     font-size: 9pt;
   }
 }
+
+/* ---------- 報告書's own 対象者 dropdown (ReportPatientPicker) ---------- */
+.patientPicker {
+  position: relative;
+}
+
+.patientPickerPanel {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  min-width: 240px;
+  background: var(--primary-bg, #fff);
+  border: 1px solid var(--border-color, #ced4da);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  overflow: hidden;
+}
+
+.patientPickerSearch {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem;
+  border-bottom: 1px solid var(--border-color, #e5e7eb);
+}
+
+.patientPickerList {
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 0.25rem 0;
+}
+
+.patientPickerOption {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  padding: 0.45rem 0.75rem;
+  text-align: left;
+  font-size: 15px;
+}
+
+.patientPickerOption:hover,
+.patientPickerOption:focus-visible {
+  background: var(--brand-50, #eef7f5);
+}
+
+.patientPickerOptionActive {
+  font-weight: 700;
+  color: var(--success-text, #146c43);
+}
+
+.patientPickerId {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--secondary-text, #6c757d);
+}
+
+.patientPickerNote {
+  padding: 0.5rem 0.75rem;
+  font-size: 13px;
+  color: var(--secondary-text, #6c757d);
+}
+
+/* ---------- Daily grid cells editable by double-click / double-tap ---------- */
+.grid td.editableCell {
+  cursor: cell;
+  /* No double-tap zoom, so a double-tap reaches the cell as two taps. */
+  touch-action: manipulation;
+  user-select: none;
+}
+
+.grid td.editableCell:hover {
+  outline: 2px solid rgba(13, 110, 253, 0.35);
+  outline-offset: -2px;
+}
+
+.grid td.editingCell {
+  /* Safari won't let an input be typed in under user-select: none. */
+  user-select: auto;
+  padding: 1px;
+  outline: 2px solid #0d6efd;
+  outline-offset: -2px;
+}
+
+.cellInput {
+  width: 100%;
+  min-width: 6em;
+  font: inherit;
+  padding: 2px 4px;
+  border: 1px solid #0d6efd;
+  border-radius: 3px;
+  background: #fff;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.grid td.savingCell {
+  opacity: 0.55;
+}
+
+.editHint {
+  font-size: 0.8rem;
+  color: var(--secondary-text, #6c757d);
+  margin: 0 0 0.25rem;
+}
+
+@media print {
+  .editHint {
+    display: none;
+  }
+}
+
+/* ---------- 月次報告欄 editing ---------- */
+/* Clickable ☐/☑ options: look like the printed boxes, not like buttons. */
+.checklistButton {
+  border: 0;
+  background: transparent;
+  padding: 1px 2px;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  border-radius: 3px;
+  touch-action: manipulation;
+}
+
+.checklistButton:hover {
+  background: rgba(13, 110, 253, 0.1);
+}
+
+.checklistButton:focus-visible {
+  outline: 2px solid #0d6efd;
+  outline-offset: 1px;
+}
+
+/* 一言 / 内容 / 方針 line: the label, then the editable text filling the rest. */
+.monthlyTextLine {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.monthlyTextEditable {
+  display: block;
+  flex: 1 1 auto;
+  min-width: 4em;
+  min-height: 1.4em;
+  cursor: cell;
+  touch-action: manipulation;
+  user-select: none;
+  border-radius: 3px;
+}
+
+.monthlyTextEditable:hover {
+  outline: 2px solid rgba(13, 110, 253, 0.35);
+  outline-offset: 1px;
+}
+
+/* 報告日 cell: the calendar input sits flush in the cell. */
+.grid td.dateCell {
+  padding: 1px 4px;
+}
+
+.grid td.dateCell .cellInput {
+  border-color: #b9b9b9;
+  cursor: pointer;
+}

@@ -29,8 +29,10 @@ const {
   rawComment,
   checklistText,
   textWithComment,
-  buildCommentBlocks,
+  footerItemText,
+  commentBlockText,
 } = require("./reportFormat");
+const { defaultLayout, visibleCommentBlocks, planCommentRows, planFooterRows } = require("./reportLayout");
 
 const FONT_DIR = path.join(__dirname, "..", "fonts");
 const FONTS = {
@@ -404,7 +406,8 @@ function buildDailyGridTable({ data, dailyFields, monthlyFields }) {
 }
 
 // ---- Page 2: monthly tally table + numbered comment blocks + 総評 + footer ----
-function buildMonthlySectionTable({ data, dailyFields, monthlyFields }) {
+function buildMonthlySectionTable({ data, dailyFields, monthlyFields, layout }) {
+  const reportLayout = layout || defaultLayout(monthlyFields);
   const dfByKey = Object.fromEntries(dailyFields.map((f) => [f.field_key, f]));
   const mfByKey = Object.fromEntries(monthlyFields.map((f) => [f.field_key, f]));
   const monthlyValues = data.monthlyReport || {};
@@ -429,42 +432,36 @@ function buildMonthlySectionTable({ data, dailyFields, monthlyFields }) {
   row++;
 
   const tallyStartRow = row;
-  const commentBlocks = buildCommentBlocks(monthlyFields);
+  // Comment blocks follow the マスター設定 layout (see reportLayout.js).
+  const commentBlocks = visibleCommentBlocks(reportLayout);
   const tallyRowKeys = Object.entries(TALLY_GROUPS).flatMap(([group, keys]) => keys.map((k) => [group, k]));
+  const rowPlan = planCommentRows(tallyRowKeys.length, commentBlocks.length);
 
-  tallyRowKeys.forEach(([group, key], idx) => {
+  for (let idx = 0; idx < rowPlan.totalRows; idx++) {
     const r = tallyStartRow + idx;
-    const label = dfByKey[key]?.field_label || key;
-    const count = data.tallies?.[group]?.[key] ?? 0;
+    const tally = tallyRowKeys[idx];
+    // Rows past the tally list (more blocks than tally rows) have empty tally cells.
+    const [group, key] = tally || ["", ""];
+    const label = tally ? dfByKey[key]?.field_label || key : "";
+    const count = tally ? data.tallies?.[group]?.[key] ?? 0 : "";
 
-    mergeAndStyle(r, 1, r, 2, group, { fill: GROUP_COLOR[group], bold: true, size: 9 });
+    mergeAndStyle(r, 1, r, 2, group, { fill: tally ? GROUP_COLOR[group] : COLORS.WHITE, bold: true, size: 9 });
     mergeAndStyle(r, 3, r, 6, label, { fill: COLORS.WHITE, align: "left", size: 9 });
-    mergeAndStyle(r, 7, r, 8, count, { fill: COLORS.YELLOW, bold: true, size: 9 });
-  });
+    mergeAndStyle(r, 7, r, 8, count, { fill: tally ? COLORS.YELLOW : COLORS.WHITE, bold: true, size: 9 });
+  }
 
-  // Each comment block spans 2 tally rows (the last block absorbs whatever rows
-  // remain), matching the reference sheet's boxes — regardless of whether the two
-  // rows it covers belong to the same 分類 group.
   let cursor = 0;
   commentBlocks.forEach((block, i) => {
-    const rowsLeft = tallyRowKeys.length - cursor;
-    if (rowsLeft <= 0) return;
-    const isLast = i === commentBlocks.length - 1;
-    const span = isLast ? rowsLeft : Math.min(2, rowsLeft);
+    const span = rowPlan.spans[i];
     const r1 = tallyStartRow + cursor;
     const r2 = r1 + span - 1;
-
-    const optionsLine = checklistText(block.field, monthlyValues[block.field.field_key]);
-    const freeText = block.freeTextField ? textWithComment(monthlyValues[block.freeTextField.field_key]) : "";
-    const numeral = CIRCLED_NUMBERS[block.number - 1] || `${block.number}.`;
-    const lines = [`${numeral}${block.field.field_label}`, optionsLine];
-    if (block.freeTextSuffix) lines.push(`${block.freeTextSuffix}：${freeText}`);
-
-    mergeAndStyle(r1, 9, r2, TOTAL_COLS, lines.filter(Boolean).join("\n"), { align: "left", size: 9 });
-
+    mergeAndStyle(r1, 9, r2, TOTAL_COLS, commentBlockText(block, monthlyValues), { align: "left", size: 9 });
     cursor += span;
   });
-  row = tallyStartRow + tallyRowKeys.length;
+  if (commentBlocks.length === 0) {
+    mergeAndStyle(tallyStartRow, 9, tallyStartRow + rowPlan.totalRows - 1, TOTAL_COLS, "", { fill: COLORS.WHITE });
+  }
+  row = tallyStartRow + rowPlan.totalRows;
 
   row++; // spacer
 
@@ -475,20 +472,25 @@ function buildMonthlySectionTable({ data, dailyFields, monthlyFields }) {
 
   row++; // spacer
 
-  // ---- Footer: 報告日 / 確認者 / 家族・関係機関共有 ----
-  mergeAndStyle(row, 1, row, 2, "報告日", { bold: true, fill: COLORS.NAVY, color: COLORS.WHITE });
-  mergeAndStyle(row, 3, row, 6, textWithComment(monthlyValues.hokokubi), { align: "left" });
-  mergeAndStyle(row, 7, row, 8, "確認者", { bold: true, fill: COLORS.NAVY, color: COLORS.WHITE });
-  mergeAndStyle(row, 9, row, 11, textWithComment(monthlyValues.kakuninsha), { align: "left" });
-  mergeAndStyle(row, 12, row, 14, "家族・関係機関共有", { bold: true, fill: COLORS.NAVY, color: COLORS.WHITE, size: 8 });
-  mergeAndStyle(
-    row,
-    15,
-    row,
-    TOTAL_COLS,
-    mfByKey.kyoyu_status ? checklistText(mfByKey.kyoyu_status, monthlyValues.kyoyu_status) : "",
-    { align: "left", size: 8 }
-  );
+  // ---- Footer (報告日 / 確認者 / … as set in マスター設定) ----
+  planFooterRows(reportLayout, TOTAL_COLS).forEach((cells) => {
+    let col = 1;
+    cells.forEach(({ item, labelSpan, valueSpan }) => {
+      mergeAndStyle(row, col, row, col + labelSpan - 1, item.label, {
+        bold: true,
+        fill: COLORS.NAVY,
+        color: COLORS.WHITE,
+        size: labelSpan > 2 ? 8 : undefined,
+      });
+      col += labelSpan;
+      mergeAndStyle(row, col, row, col + valueSpan - 1, footerItemText(item, monthlyValues[item.fieldKey]), {
+        align: "left",
+        size: item.type === "checklist" ? 8 : undefined,
+      });
+      col += valueSpan;
+    });
+    row++;
+  });
 
   return {
     table: { widths: MONTHLY_COL_WIDTHS, body: grid.finalize(), dontBreakRows: true },
@@ -497,7 +499,7 @@ function buildMonthlySectionTable({ data, dailyFields, monthlyFields }) {
   };
 }
 
-function buildReportPdfDocDefinition({ data, dailyFields, monthlyFields }) {
+function buildReportPdfDocDefinition({ data, dailyFields, monthlyFields, layout }) {
   return {
     pageSize: "A4",
     pageOrientation: "landscape",
@@ -505,14 +507,14 @@ function buildReportPdfDocDefinition({ data, dailyFields, monthlyFields }) {
     defaultStyle: { font: "NotoSansJP", fontSize: 8 },
     content: [
       buildDailyGridTable({ data, dailyFields, monthlyFields }),
-      buildMonthlySectionTable({ data, dailyFields, monthlyFields }),
+      buildMonthlySectionTable({ data, dailyFields, monthlyFields, layout }),
     ],
   };
 }
 
-async function buildReportPdfBuffer({ data, dailyFields, monthlyFields }) {
+async function buildReportPdfBuffer({ data, dailyFields, monthlyFields, layout }) {
   const printer = new PdfPrinter(FONTS);
-  const docDefinition = buildReportPdfDocDefinition({ data, dailyFields, monthlyFields });
+  const docDefinition = buildReportPdfDocDefinition({ data, dailyFields, monthlyFields, layout });
   const doc = printer.createPdfKitDocument(docDefinition);
 
   return new Promise((resolve, reject) => {

@@ -16,8 +16,10 @@ const {
   rawComment,
   checklistText,
   textWithComment,
-  buildCommentBlocks,
+  footerItemText,
+  commentBlockText,
 } = require("./reportFormat");
+const { defaultLayout, visibleCommentBlocks, planCommentRows, planFooterRows } = require("./reportLayout");
 
 // ExcelJS wants ARGB; reportFormat's shared palette is plain RRGGBB.
 const argb = (rgb) => `FF${rgb}`;
@@ -106,7 +108,8 @@ function mergeAndStyle(ws, r1, c1, r2, c2, value, opts) {
   return cell;
 }
 
-async function buildReportWorkbook({ data, dailyFields, monthlyFields }) {
+async function buildReportWorkbook({ data, dailyFields, monthlyFields, layout }) {
+  const reportLayout = layout || defaultLayout(monthlyFields);
   const workbook = new ExcelJS.Workbook();
   workbook.creator = "patient-status-report";
   workbook.created = new Date();
@@ -294,18 +297,23 @@ async function buildReportWorkbook({ data, dailyFields, monthlyFields }) {
   row++;
 
   const tallyStartRow = row;
-  const commentBlocks = buildCommentBlocks(monthlyFields);
+  // Comment blocks follow the マスター設定 layout (see reportLayout.js).
+  const commentBlocks = visibleCommentBlocks(reportLayout);
   const tallyRowKeys = Object.entries(TALLY_GROUPS).flatMap(([group, keys]) => keys.map((k) => [group, k]));
+  const rowPlan = planCommentRows(tallyRowKeys.length, commentBlocks.length);
 
-  tallyRowKeys.forEach(([group, key], idx) => {
+  for (let idx = 0; idx < rowPlan.totalRows; idx++) {
     const r = tallyStartRow + idx;
-    const label = dfByKey[key]?.field_label || key;
-    const count = data.tallies?.[group]?.[key] ?? 0;
+    const tally = tallyRowKeys[idx];
+    // Rows past the tally list (more blocks than tally rows) have empty tally cells.
+    const [group, key] = tally || ["", ""];
+    const label = tally ? dfByKey[key]?.field_label || key : "";
+    const count = tally ? data.tallies?.[group]?.[key] ?? 0 : "";
 
     const catCell = ws.getCell(r, 1);
     catCell.value = group;
     ws.mergeCells(r, 1, r, 2);
-    styleCell(catCell, { fill: GROUP_COLOR[group], bold: true, size: 9 });
+    styleCell(catCell, { fill: tally ? GROUP_COLOR[group] : WHITE, bold: true, size: 9 });
 
     const itemCell = ws.getCell(r, 3);
     itemCell.value = label;
@@ -315,36 +323,29 @@ async function buildReportWorkbook({ data, dailyFields, monthlyFields }) {
     const countCell = ws.getCell(r, 7);
     countCell.value = count;
     ws.mergeCells(r, 7, r, 8);
-    styleCell(countCell, { fill: YELLOW, bold: true, size: 9 });
+    styleCell(countCell, { fill: tally ? YELLOW : WHITE, bold: true, size: 9 });
 
     ws.getRow(r).height = 26;
-  });
+  }
 
-  // Each comment block spans 2 tally rows (the last block absorbs whatever rows
-  // remain), matching the reference sheet's boxes — regardless of whether the two
-  // rows it covers belong to the same 分類 group.
   let cursor = 0;
   commentBlocks.forEach((block, i) => {
-    const rowsLeft = tallyRowKeys.length - cursor;
-    if (rowsLeft <= 0) return;
-    const isLast = i === commentBlocks.length - 1;
-    const span = isLast ? rowsLeft : Math.min(2, rowsLeft);
+    const span = rowPlan.spans[i];
     const r1 = tallyStartRow + cursor;
     const r2 = r1 + span - 1;
 
-    const commentCell = ws.getCell(r1, 10);
+    const commentCell = ws.getCell(r1, 9);
     ws.mergeCells(r1, 9, r2, COLS);
-    const optionsLine = checklistText(block.field, monthlyValues[block.field.field_key]);
-    const freeText = block.freeTextField ? textWithComment(monthlyValues[block.freeTextField.field_key]) : "";
-    const numeral = CIRCLED_NUMBERS[block.number - 1] || `${block.number}.`;
-    const lines = [`${numeral}${block.field.field_label}`, optionsLine];
-    if (block.freeTextSuffix) lines.push(`${block.freeTextSuffix}：${freeText}`);
-    commentCell.value = lines.filter(Boolean).join("\n");
+    commentCell.value = commentBlockText(block, monthlyValues);
     styleCell(commentCell, { align: "left", valign: "top", size: 9 });
 
     cursor += span;
   });
-  row = tallyStartRow + tallyRowKeys.length;
+  if (commentBlocks.length === 0) {
+    ws.mergeCells(tallyStartRow, 9, tallyStartRow + rowPlan.totalRows - 1, COLS);
+    styleCell(ws.getCell(tallyStartRow, 9), { fill: WHITE });
+  }
+  row = tallyStartRow + rowPlan.totalRows;
 
   row++; // spacer
 
@@ -356,21 +357,26 @@ async function buildReportWorkbook({ data, dailyFields, monthlyFields }) {
 
   row++; // spacer
 
-  // ---- Footer: 報告日 / 確認者 / 家族・関係機関共有 ----
-  mergeAndStyle(ws, row, 1, row, 2, "報告日", { bold: true, fill: NAVY, color: WHITE });
-  mergeAndStyle(ws, row, 3, row, 6, textWithComment(monthlyValues.hokokubi), { align: "left" });
-  mergeAndStyle(ws, row, 7, row, 8, "確認者", { bold: true, fill: NAVY, color: WHITE });
-  mergeAndStyle(ws, row, 9, row, 11, textWithComment(monthlyValues.kakuninsha), { align: "left" });
-  mergeAndStyle(ws, row, 12, row, 14, "家族・関係機関共有", { bold: true, fill: NAVY, color: WHITE, size: 9 });
-  mergeAndStyle(
-    ws,
-    row,
-    15,
-    row,
-    COLS,
-    mfByKey.kyoyu_status ? checklistText(mfByKey.kyoyu_status, monthlyValues.kyoyu_status) : "",
-    { align: "left", size: 9 }
-  );
+  // ---- Footer (報告日 / 確認者 / … as set in マスター設定) ----
+  const footerRows = planFooterRows(reportLayout, COLS);
+  footerRows.forEach((cells, i) => {
+    let col = 1;
+    cells.forEach(({ item, labelSpan, valueSpan }) => {
+      mergeAndStyle(ws, row, col, row, col + labelSpan - 1, item.label, {
+        bold: true,
+        fill: NAVY,
+        color: WHITE,
+        size: labelSpan > 2 ? 9 : undefined,
+      });
+      col += labelSpan;
+      mergeAndStyle(ws, row, col, row, col + valueSpan - 1, footerItemText(item, monthlyValues[item.fieldKey]), {
+        align: "left",
+        size: item.type === "checklist" ? 9 : undefined,
+      });
+      col += valueSpan;
+    });
+    if (i < footerRows.length - 1) row++;
+  });
 
   const lastColLetter = String.fromCharCode(64 + COLS); // COLS <= 26
   ws.pageSetup.printArea = `A1:${lastColLetter}${row}`;
