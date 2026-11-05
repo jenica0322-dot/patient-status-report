@@ -8,6 +8,7 @@ const {
 const { recordData, getStatusRecords } = require('../controllers/recordData');
 const { getPatients, getPatientAreas, savePatient, deletePatient } = require('../controllers/patientController');
 const { getPatientReport, exportPatientReportExcel, exportPatientReportPdf } = require('../controllers/reportController');
+const { getReportLayout, putReportLayout, deleteReportLayout } = require('../controllers/reportLayoutController');
 const {
   uploadPhotos,
   getRecordPhotos,
@@ -43,6 +44,10 @@ router.get('/status-report', getPatientReport);
 router.get('/status-report/export', exportPatientReportExcel);
 router.get('/status-report/export-pdf', exportPatientReportPdf);
 router.get('/status-report/photos', getReportPhotos);
+
+router.get('/report-layout', getReportLayout);
+router.put('/report-layout', putReportLayout);
+router.delete('/report-layout', deleteReportLayout);
 
 router.post('/status-records/photos', handlePhotoUpload, uploadPhotos);
 router.get('/status-records/photos', getRecordPhotos);

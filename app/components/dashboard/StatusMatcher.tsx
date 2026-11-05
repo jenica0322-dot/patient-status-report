@@ -213,7 +213,8 @@ const GROUP_TARGET_FIELDS: GroupTargetField[] = [
       { label: "なし", key: "kanshoku", value: true },
       { label: "半分", key: "hanbun", value: true },
       { label: "あり", key: "nokoshi", value: true },
-      // Picking this also clears 体調 and skips that step (see applyNoIssues).
+      // Picking this also checks 完食, clears 体調, skips that step and saves
+      // the record at once (see applyNoIssues).
       { label: "問題なし", key: "mondai_nashi", value: true },
     ],
   },
@@ -291,6 +292,9 @@ function matchChoice(utterance: string, choices: string[]): string | null {
 
 function isGroupOptionSelected(option: GroupOption, values: Record<string, { value?: any; comment?: string }>): boolean {
   if (option.next) return option.next.some((n) => isGroupOptionSelected(n, values));
+  // 問題なし also stores 完食 (kanshoku) behind the scenes, but on screen only
+  // 「問題なし」 is shown as picked — not 「なし」 alongside it.
+  if (option.key === "kanshoku" && values.mondai_nashi?.value === true) return false;
   return !!option.key && values[option.key]?.value === option.value;
 }
 
@@ -1105,51 +1109,40 @@ export default function StatusMatcher() {
     }
   };
 
-  // 「問題なし」 (tapped or spoken on 食べ残し): selected like any other 食べ残し
-  // choice (clearing なし/半分/あり), every 体調 item cleared, then the 体調 step
-  // is skipped. Nothing is saved here — like every
-  // other choice, the record is only saved through 保存 (or 保存しますか？ → はい).
+  // 「問題なし」 (tapped or spoken on 食べ残し) = a completed meal with no health
+  // issues: 完食 (kanshoku) and 問題なし are both checked, 半分/残し cleared,
+  // every 体調 item cleared, the 体調 step is skipped, and the record
+  // (食べ残し + 体調) is saved right away — one tap, no separate 保存 press.
   const applyNoIssues = () => {
+    if (savingRecordRef.current) return;
     const tabenokoshi = GROUP_TARGET_FIELDS.find((g) => g.field_key === "__tabenokoshi")!;
     const taicho = GROUP_TARGET_FIELDS.find((g) => g.field_key === "__taicho")!;
-    selectGroupOption(tabenokoshi, groupLeafOptions(tabenokoshi.options).find((o) => o.label === NO_ISSUES_LABEL)!, true);
     const v = valuesRef.current;
     const next = { ...v };
-    for (const leaf of groupLeafOptions(taicho.options)) {
+    // Clear every 食べ残し and 体調 choice first…
+    for (const leaf of [...groupLeafOptions(tabenokoshi.options), ...groupLeafOptions(taicho.options)]) {
       if (leaf.key && v[leaf.key]?.value === leaf.value) {
         next[leaf.key] = { ...(v[leaf.key] || {}), value: leaf.value === true ? false : "" };
       }
     }
+    // …then check 完食 and 問題なし together.
+    next.kanshoku = { ...(v.kanshoku || {}), value: true };
+    next.mondai_nashi = { ...(v.mondai_nashi || {}), value: true };
     valuesRef.current = next;
     setValues(next);
-    setStatusMsg(`「${NO_ISSUES_LABEL}」を記録しました`);
 
-    // Move on as any other single-choice pick would, but from 体調 rather than
-    // 食べ残し so the 体調 step itself is skipped.
+    // Skip the 体調 step: land on the next unanswered Target Field after it
+    // (if any), otherwise stay on 食べ残し so the saved 問題なし selection
+    // stays in view — the 体調 screen is never shown.
     const idx = pickerFields.findIndex((f) => f.field_key === taicho.field_key);
     const following = (idx === -1 ? [] : pickerFields.slice(idx + 1)).find((f) => !shouldSkipInAutoFlow(f, next));
-    if (following) {
-      if (flowPhaseRef.current === "field") {
-        goToField(following);
-      } else if (flowPhaseRef.current === "off") {
-        setFocusKey(following.field_key);
-        focusKeyRef.current = following.field_key;
-      }
-      return;
-    }
-    // Nothing left to ask: end the voice questions here without the
-    // 保存しますか？ prompt — the user saves with 保存 when ready. The mic is
-    // left as it is, so a spoken 「保存」 still works.
-    if (flowPhaseRef.current !== "off") {
-      flowPhaseRef.current = "off";
-      setAwaitingSaveConfirm(false);
-      if (typeof window !== "undefined") window.speechSynthesis?.cancel();
-    }
-    // Show the 体調 screen (now with nothing selected) as the next step,
-    // without asking its question by voice.
-    setFocusKey(taicho.field_key);
-    focusKeyRef.current = taicho.field_key;
-    setStatusMsg(`「${NO_ISSUES_LABEL}」を記録しました — 保存ボタンで保存してください`);
+    const landingKey = following?.field_key ?? tabenokoshi.field_key;
+    setFocusKey(landingKey);
+    focusKeyRef.current = landingKey;
+
+    // Save 食べ残し and 体調 together now. handleSaveRecord reads valuesRef,
+    // which already holds both, and ends the voice flow (no 保存しますか？).
+    void handleSaveRecord(`✅ 「${NO_ISSUES_LABEL}」— 完食・体調問題なしで保存しました`);
   };
 
   // Choices shown on screen for the active Target Field when it's a click-choice
@@ -1418,7 +1411,7 @@ export default function StatusMatcher() {
     }
   };
 
-  const handleSaveRecord = async () => {
+  const handleSaveRecord = async (successMsg = "✅ 保存しました") => {
     if (savingRecordRef.current) return;
     // Saving ends the voice session: stop the mic, recognition and any
     // voice-over right away (whether 保存 was tapped or spoken), and leave
@@ -1455,9 +1448,9 @@ export default function StatusMatcher() {
         await uploadStatusPhotos({ ...baseParams, files: toUpload.map((p) => p.file) });
         toUpload.forEach((p) => URL.revokeObjectURL(p.url));
         setPendingPhotos([]);
-        setStatusMsg(`✅ 保存しました（写真${toUpload.length}枚を含む）`);
+        setStatusMsg(`${successMsg}（写真${toUpload.length}枚を含む）`);
       } else {
-        setStatusMsg("✅ 保存しました");
+        setStatusMsg(successMsg);
       }
 
       setMatches([]);
@@ -1538,7 +1531,7 @@ export default function StatusMatcher() {
             <button
               type="button"
               className={`btn btn-success ms-auto px-4 fw-bold ${styles.toolbarBtn}`}
-              onClick={handleSaveRecord}
+              onClick={() => handleSaveRecord()}
               disabled={savingRecord}
               aria-busy={savingRecord}
             >

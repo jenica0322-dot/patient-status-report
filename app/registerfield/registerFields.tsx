@@ -1,7 +1,8 @@
 // app/registerfield/registerFields.tsx
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
+import ReportLayoutSettings from "./ReportLayoutSettings";
 import {
   Container,
   Row,
@@ -44,6 +45,9 @@ const SCREENS = [
   { key: "monthly_report", label: "月次報告" },
 ];
 
+// Third tab next to the screens: the 報告書's comment-block / footer layout.
+const LAYOUT_TAB = "report_layout";
+
 export default function RegisterFields() {
   const [fields, setFields] = useState<Field[]>([]);
   const [form, setForm] = useState<Field>({
@@ -57,6 +61,15 @@ export default function RegisterFields() {
   const [newPhrase, setNewPhrase] = useState("");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [layoutTab, setLayoutTab] = useState(false);
+  const layoutDirtyRef = useRef(false);
+  // Leaving the 報告書レイアウト tab with unsaved edits asks first.
+  const leaveLayoutTab = () => {
+    if (layoutTab && layoutDirtyRef.current && !confirm("報告書レイアウトの保存していない変更を破棄しますか？")) return false;
+    layoutDirtyRef.current = false;
+    setLayoutTab(false);
+    return true;
+  };
 
   useEffect(() => {
     loadFields();
@@ -181,16 +194,33 @@ export default function RegisterFields() {
                   {SCREENS.map((s) => (
                     <Button
                       key={s.key}
-                      variant={form.screen_key === s.key ? "primary" : "outline-primary"}
-                      onClick={() => handleScreenChange(s.key)}
+                      variant={!layoutTab && form.screen_key === s.key ? "primary" : "outline-primary"}
+                      onClick={() => {
+                        if (!leaveLayoutTab()) return;
+                        if (form.screen_key !== s.key) handleScreenChange(s.key);
+                      }}
                       style={{ fontSize: 18 }}
                     >
                       {s.label}
                     </Button>
                   ))}
+                  <Button
+                    key={LAYOUT_TAB}
+                    variant={layoutTab ? "primary" : "outline-primary"}
+                    onClick={() => {
+                      setMessage(null);
+                      setLayoutTab(true);
+                    }}
+                    style={{ fontSize: 18 }}
+                  >
+                    報告書レイアウト
+                  </Button>
                 </div>
               </Form.Group>
 
+              {layoutTab ? (
+                <ReportLayoutSettings onDirtyChange={(d) => (layoutDirtyRef.current = d)} />
+              ) : (
               <Row>
                 <Col md={7}>
                   <Card className="mb-3 mb-md-0">
@@ -379,6 +409,7 @@ export default function RegisterFields() {
                   </Card>
                 </Col>
               </Row>
+              )}
             </Card.Body>
           </Card>
         </Col>
