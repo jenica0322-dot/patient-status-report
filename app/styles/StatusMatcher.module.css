@@ -126,10 +126,87 @@
   font-size: 16px;
 }
 
+/* 記録日 box matches the buttons' height and rounding. */
+.scopeBarControls input.toolbarBtn {
+  min-height: 48px;
+  border-radius: 14px;
+  border-width: 2px;
+}
+
+/* ---------- Toolbar buttons ----------
+   Rounded, touch-friendly (48px tall), icon + label centred. Bootstrap's
+   .btn-sm radius/padding is overridden via the doubled class. */
+button.toolbarBtn.toolbarBtn {
+  min-height: 48px;
+  padding: 0.35rem 1.1rem;
+  border-radius: 14px;
+  font-weight: 700;
+  line-height: 1.2;
+  --bs-btn-border-width: 2px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+button.toolbarBtn > svg {
+  flex-shrink: 0;
+}
+
 .photoUploadBtn {
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
+  gap: 0.45rem;
+}
+
+/* Secondary (写真追加 / QR読取 / いいえ): white with a teal outline. */
+.secondaryBtn.secondaryBtn {
+  --bs-btn-color: var(--brand-700);
+  --bs-btn-bg: var(--primary-bg);
+  --bs-btn-border-color: var(--brand-500);
+  --bs-btn-hover-color: var(--brand-800);
+  --bs-btn-hover-bg: var(--brand-50);
+  --bs-btn-hover-border-color: var(--brand-600);
+  --bs-btn-active-color: var(--brand-800);
+  --bs-btn-active-bg: var(--brand-100);
+  --bs-btn-active-border-color: var(--brand-600);
+  --bs-btn-disabled-color: var(--brand-700);
+  --bs-btn-disabled-bg: var(--primary-bg);
+  --bs-btn-disabled-border-color: var(--brand-300);
+  box-shadow: var(--shadow-sm);
+}
+
+/* Primary (保存 / はい): solid teal, raised so it stands out. */
+.primaryBtn.primaryBtn {
+  --bs-btn-color: #fff;
+  --bs-btn-hover-color: #fff;
+  --bs-btn-active-color: #fff;
+  --bs-btn-disabled-color: #fff;
+  border-color: transparent;
+  background: var(--gradient-primary);
+  box-shadow: 0 6px 16px rgba(13, 148, 136, 0.35);
+  letter-spacing: 0.04em;
+}
+
+@media (hover: hover) {
+  .primaryBtn.primaryBtn:hover:not(:disabled) {
+    background: linear-gradient(135deg, var(--brand-600) 0%, var(--brand-700) 100%);
+    box-shadow: 0 8px 20px rgba(13, 148, 136, 0.42);
+  }
+}
+
+.primaryBtn.primaryBtn:active:not(:disabled) {
+  background: var(--brand-700);
+  box-shadow: 0 2px 6px rgba(13, 148, 136, 0.3);
+}
+
+.primaryBtn.primaryBtn:disabled {
+  opacity: 0.7;
+}
+
+/* 日次記録 tab: same 2px teal outline as the other buttons. */
+.toolbarTab.toolbarTab {
+  --bs-btn-border-color: var(--brand-500);
+  --bs-btn-hover-border-color: var(--brand-600);
 }
 
 .photoStrip {
@@ -687,6 +764,14 @@
     padding-bottom: 0.2rem;
   }
 
+  /* Still at the 44px touch-target minimum on phones. */
+  button.toolbarBtn.toolbarBtn,
+  .scopeBarControls input.toolbarBtn {
+    min-height: 44px;
+    padding-left: 0.85rem;
+    padding-right: 0.85rem;
+  }
+
   .targetBox :global(.card-body) {
     padding: 0.25rem 0;
   }
@@ -776,8 +861,9 @@
   --row-h: min(120px, calc((100cqh - 4 * var(--choice-gap) - 1px) / 5));
   height: var(--row-h);
   min-height: 0;
-  border-radius: 12px !important;
+  border-radius: 14px !important;
   border: 2px solid var(--border-color-strong) !important;
+  box-shadow: var(--shadow-sm);
   background-color: var(--primary-bg) !important;
   color: var(--primary-text);
   padding: 0 1rem !important;
@@ -814,8 +900,22 @@
   background-color: var(--selected-bg) !important;
 }
 
+.targetBox .choiceOptionSelected {
+  box-shadow: 0 0 0 3px rgba(15, 175, 154, 0.15);
+}
+
 .targetBox .choiceOptionSelected .choiceLabel {
   color: var(--success-text) !important;
+  font-weight: 700 !important;
+}
+
+/* Check icon at the right end of a selected option. */
+.choiceCheck {
+  flex: 0 0 auto;
+  margin-left: auto;
+  width: clamp(20px, calc(var(--row-h, 52px) * 0.4), 28px);
+  height: clamp(20px, calc(var(--row-h, 52px) * 0.4), 28px);
+  color: var(--brand-600);
 }
 
 @media (hover: hover) {

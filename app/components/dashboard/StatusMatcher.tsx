@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useMemo, Fragment } from "react";
-import { MicFill, StopFill, CheckCircleFill, Circle, ChevronDown, ChatLeftText, CameraFill, QrCodeScan, Trash } from "react-bootstrap-icons";
+import { MicFill, StopFill, CheckCircleFill, CheckCircle, Circle, ChevronDown, ChatLeftText, CameraFill, QrCodeScan, Trash, FloppyFill } from "react-bootstrap-icons";
 import { Spinner } from "react-bootstrap";
 import styles from "@/app/styles/StatusMatcher.module.css";
 import {
@@ -1481,7 +1481,8 @@ export default function StatusMatcher() {
                 type="button"
                 // 月次報告 is hidden from view; its screen and logic are left as they are.
                 hidden={s.key === "monthly_report"}
-                className={`btn btn-sm ${styles.toolbarBtn} ${screenKey === s.key ? "btn-primary" : "btn-outline-primary"}`}
+                className={`btn btn-sm ${styles.toolbarBtn} ${styles.toolbarTab} ${screenKey === s.key ? "btn-primary" : "btn-outline-primary"}`}
+                aria-pressed={screenKey === s.key}
                 onClick={() => setScreenKey(s.key)}
               >
                 {s.label}
@@ -1504,7 +1505,7 @@ export default function StatusMatcher() {
           )}
           <button
             type="button"
-            className={`btn btn-sm btn-outline-primary ${styles.photoUploadBtn} ${styles.toolbarBtn}`}
+            className={`btn btn-sm btn-outline-primary ${styles.photoUploadBtn} ${styles.toolbarBtn} ${styles.secondaryBtn}`}
             onClick={handlePhotoButtonClick}
           >
             <CameraFill size="1em" />
@@ -1520,7 +1521,7 @@ export default function StatusMatcher() {
           </>)}
           <button
             type="button"
-            className={`btn btn-sm btn-outline-primary ${styles.photoUploadBtn} ${styles.toolbarBtn}`}
+            className={`btn btn-sm btn-outline-primary ${styles.photoUploadBtn} ${styles.toolbarBtn} ${styles.secondaryBtn}`}
             onClick={() => setQrOpen(true)}
             disabled={isSearching}
           >
@@ -1530,12 +1531,14 @@ export default function StatusMatcher() {
           {selectedPatient && allTargetFieldsAnswered && (
             <button
               type="button"
-              className={`btn btn-success ms-auto px-4 fw-bold ${styles.toolbarBtn}`}
+              className={`btn btn-success ms-auto px-4 fw-bold ${styles.photoUploadBtn} ${styles.toolbarBtn} ${styles.primaryBtn}`}
               onClick={() => handleSaveRecord()}
               disabled={savingRecord}
               aria-busy={savingRecord}
             >
-              {savingRecord && <Spinner key="saving-spinner" className="me-1" animation="border" size="sm" />}
+              {savingRecord
+                ? <Spinner key="saving-spinner" animation="border" size="sm" />
+                : <FloppyFill key="save-icon" size="1em" />}
               <span>{savingRecord ? "保存中…" : "保存"}</span>
             </button>
           )}
@@ -1700,6 +1703,7 @@ export default function StatusMatcher() {
                                   {isSelected ? "✓" : "・"}
                                 </span>
                                 <span className={`fw-medium ${styles.choiceLabel} ${isSelected ? "text-success" : ""}`}>{o.label}</span>
+                                {isSelected && <CheckCircle className={styles.choiceCheck} aria-hidden="true" />}
                               </button>
                               {showNext &&
                                 o.next!.map((n) => {
@@ -1721,6 +1725,7 @@ export default function StatusMatcher() {
                                         {isNextSelected ? "✓" : "・"}
                                       </span>
                                       <span className={`fw-medium ${styles.choiceLabel} ${isNextSelected ? "text-success" : ""}`}>{n.label}</span>
+                                      {isNextSelected && <CheckCircle className={styles.choiceCheck} aria-hidden="true" />}
                                     </button>
                                   );
                                 })}
@@ -1784,6 +1789,7 @@ export default function StatusMatcher() {
                                 {isSelected ? "✓" : "・"}
                               </span>
                               <span className={`fw-medium ${styles.choiceLabel} ${isSelected ? "text-success" : ""}`}>{p}</span>
+                              {isSelected && <CheckCircle className={styles.choiceCheck} aria-hidden="true" />}
                             </button>
                           );
                         })}
@@ -1852,10 +1858,11 @@ export default function StatusMatcher() {
 
       {awaitingSaveConfirm && (
         <div className="d-flex gap-2 justify-content-center">
-          <button type="button" className="btn btn-success" onClick={confirmSaveYes} disabled={savingRecord}>
+          <button type="button" className={`btn btn-success ${styles.photoUploadBtn} ${styles.toolbarBtn} ${styles.primaryBtn}`} onClick={confirmSaveYes} disabled={savingRecord}>
+            <FloppyFill size="1em" />
             はい（保存する）
           </button>
-          <button type="button" className="btn btn-outline-secondary" onClick={confirmSaveNo} disabled={savingRecord}>
+          <button type="button" className={`btn btn-outline-primary ${styles.toolbarBtn} ${styles.secondaryBtn}`} onClick={confirmSaveNo} disabled={savingRecord}>
             いいえ
           </button>
         </div>
