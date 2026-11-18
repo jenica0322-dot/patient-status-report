@@ -23,16 +23,15 @@ import { normalizeSpokenDigits, toHiragana } from "@/app/lib/voiceText";
 import { findPatientByTargetUserId, parseTargetUserId } from "@/app/lib/qrTargetUser";
 import { consumeVoiceFlowResume } from "@/app/lib/voiceFlowResume";
 import {
-  GROUP_TARGET_FIELDS,
+  getGroupTargetFields,
   NO_ISSUES_KEY,
   TARGET_GROUP_SCREEN_KEY,
-  UKETORI_DEFAULT_LABEL,
   buildGroupTargetFields,
   choiceSpellings,
   groupAllOptions,
   setGroupTargetFields,
-  uketoriLabel,
-  uketoriOptions,
+  LIST_SEP,
+  listValues,
   type GroupOption,
   type GroupTargetField,
 } from "@/app/lib/targetFields";
@@ -218,14 +217,15 @@ const NO_ISSUES_COMMAND = /^(問題(なし|無し|ない|ありません)|もん
 // The heading above each choice list is the category's マスター label
 // (うけとり状況を選択 / 食べ残し状況を選択 / 体調を選択（複数選択可）).
 
-// Target Field dropdown entries: only うけとり and the picker-only group fields
-// (食べ残し / 体調), each group placed where its first column sits.
-function buildPickerFields(fields: Field[]): (Field | GroupTargetField)[] {
-  return fields.flatMap((f): (Field | GroupTargetField)[] => {
-    const group = GROUP_TARGET_FIELDS.find((g) => g.anchorKey === f.field_key);
-    if (group) return [group];
-    return f.field_key === "uketori" ? [f] : [];
-  });
+// Target Field entries (the categories asked on this screen, in master order):
+// every category from the master — うけとり, 食べ残し / 体調 (placed where
+// their first column sits) and any category added in マスター — each as a
+// picker (see app/lib/targetFields.ts). Other report columns stay hidden.
+// (`groupRows` is a dependency only: the pickers are rebuilt from it.)
+// In the order chosen in マスター (表示順) — getGroupTargetFields() is already
+// sorted that way; only categories whose column exists on this screen count.
+function buildPickerFields(fields: Field[], _groupRows: Field[]): (Field | GroupTargetField)[] {
+  return getGroupTargetFields().filter((g) => fields.some((f) => f.field_key === g.anchorKey));
 }
 
 function groupLeafOptions(options: GroupOption[]): GroupOption[] {
@@ -307,7 +307,17 @@ function isGroupOptionSelected(option: GroupOption, values: Record<string, { val
   // 問題なし also stores 完食 (kanshoku) behind the scenes, but on screen only
   // 「問題なし」 is shown as picked — not 「なし」 alongside it.
   if (option.key === "kanshoku" && values.mondai_nashi?.value === true) return false;
-  return !!option.key && values[option.key]?.value === option.value;
+  if (!option.key) return false;
+  // Several options sharing one column (multiple-choice category).
+  if (option.listValue) return listValues(values[option.key]?.value).includes(option.value);
+  return values[option.key]?.value === option.value;
+}
+
+// The column value after turning a shared-column option on or off.
+function toggledListValue(current: unknown, label: string, on: boolean): string {
+  const list = listValues(current).filter((x) => x !== label);
+  if (on) list.push(label);
+  return list.join(LIST_SEP);
 }
 
 function shouldSkipInAutoFlow(field: Pick<Field, "field_key" | "field_label">, values: Record<string, { value?: any; comment?: string }>) {
@@ -322,9 +332,15 @@ function shouldSkipInAutoFlow(field: Pick<Field, "field_key" | "field_label">, v
 
 // Whether a Target Field already holds an answer. A `multiple` picker (体調)
 // may legitimately be left empty, so it always counts as answered.
-function isTargetFieldAnswered(field: Pick<Field, "field_key">, values: Record<string, { value?: any; comment?: string }>) {
-  const group = GROUP_TARGET_FIELDS.find((g) => g.field_key === field.field_key);
+function isTargetFieldAnswered(
+  field: Pick<Field, "field_key"> & { field_type?: string },
+  values: Record<string, { value?: any; comment?: string }>
+) {
+  const group = getGroupTargetFields().find((g) => g.field_key === field.field_key);
   if (group) return !!group.multiple || groupLeafOptions(group.options).some((o) => isGroupOptionSelected(o, values));
+  // A checkbox / text category added in マスター is optional (unchecked or
+  // blank is a valid answer), so it never holds back 保存.
+  if (field.field_type === "checkbox" || field.field_type === "text") return true;
   const v = values[field.field_key]?.value;
   return v !== undefined && v !== null && v !== "";
 }
@@ -424,7 +440,9 @@ export default function StatusMatcher() {
   const [fields, setFields] = useState<Field[]>([]);
   const [focusKey, setFocusKey] = useState<string>("");
   // うけとり's heading — its マスター label (daily_target row).
-  const [uketoriTitle, setUketoriTitle] = useState(UKETORI_DEFAULT_LABEL);
+  // daily_target master rows: 食べ残し / 体調 definitions and the on-screen
+  // labels (headings) of うけとり and categories added in マスター.
+  const [groupRows, setGroupRows] = useState<Field[]>([]);
   const [values, setValues] = useState<Record<string, { value?: any; comment?: string }>>({});
   const [isListening, setIsListening] = useState(false);
   const [transcript, setTranscript] = useState("");
@@ -539,19 +557,49 @@ export default function StatusMatcher() {
       // 食べ残し / 体調 label and options come from the master too (falling
       // back to the built-in ones if they can't be loaded). Set before
       // setFields so the re-render already sees them.
+      let targetRows: Field[] = [];
       if (screenKey === "daily_status") {
-        const groupRows = await fetchStatusFields(TARGET_GROUP_SCREEN_KEY).catch(() => []);
-        setGroupTargetFields(buildGroupTargetFields(groupRows, rows));
-        setUketoriTitle(uketoriLabel(groupRows));
+        targetRows = await fetchStatusFields(TARGET_GROUP_SCREEN_KEY).catch(() => []);
+        setGroupTargetFields(buildGroupTargetFields(targetRows, rows));
       }
+      setGroupRows(targetRows);
       setFields(rows);
       // Start on the first Target Field entry (うけとり) rather than the first
       // master row (利用者選択); screens without entries keep the first row.
-      const firstPicker = buildPickerFields(rows)[0];
+      const firstPicker = buildPickerFields(rows, targetRows)[0];
       if (firstPicker) setFocusKey(firstPicker.field_key);
       else if (rows.length) setFocusKey(rows[0].field_key);
       setManualText("");
     })();
+  }, [screenKey]);
+
+  // Re-read the master when this tab comes back into view, so categories /
+  // options just saved in マスター (e.g. in another tab) show up here without
+  // a reload. Keeps the current focus and any answers already given.
+  useEffect(() => {
+    if (screenKey !== "daily_status") return;
+    let busy = false;
+    const refresh = async () => {
+      if (busy || document.visibilityState !== "visible") return;
+      busy = true;
+      try {
+        const rows = await fetchStatusFields(screenKey);
+        const targetRows = await fetchStatusFields(TARGET_GROUP_SCREEN_KEY).catch(() => []);
+        setGroupTargetFields(buildGroupTargetFields(targetRows, rows));
+        setGroupRows(targetRows);
+        setFields(rows);
+      } catch {
+        // Keep what's on screen if the master can't be reached.
+      } finally {
+        busy = false;
+      }
+    };
+    document.addEventListener("visibilitychange", refresh);
+    window.addEventListener("focus", refresh);
+    return () => {
+      document.removeEventListener("visibilitychange", refresh);
+      window.removeEventListener("focus", refresh);
+    };
   }, [screenKey]);
 
   // Load any already-saved record for this patient + date/month, so re-visiting edits instead of starting blank.
@@ -705,12 +753,12 @@ export default function StatusMatcher() {
   );
   const isPatientSelectField = focusField?.field_label === PATIENT_SELECT_FIELD_LABEL;
   const focusGroupField = useMemo(
-    () => GROUP_TARGET_FIELDS.find((g) => g.field_key === focusKey),
+    () => getGroupTargetFields().find((g) => g.field_key === focusKey),
     // `fields` too: the groups are reloaded from the master alongside it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [focusKey, fields]
   );
-  const pickerFields = useMemo(() => buildPickerFields(fields), [fields]);
+  const pickerFields = useMemo(() => buildPickerFields(fields, groupRows), [fields, groupRows]);
   // Where the comment box reads/writes for the focused Target Field. Picker-only
   // fields (食べ残し / 体調) have no column of their own, so their comment goes
   // on the report column they sit in front of.
@@ -735,7 +783,13 @@ export default function StatusMatcher() {
       const wasSelected = isGroupOptionSelected(option, v);
       next[option.key!] = {
         ...(v[option.key!] || {}),
-        value: wasSelected ? (option.value === true ? false : "") : option.value,
+        value: option.listValue
+          ? toggledListValue(v[option.key!]?.value, option.value, !wasSelected)
+          : wasSelected
+            ? option.value === true
+              ? false
+              : ""
+            : option.value,
       };
       valuesRef.current = next;
       setValues(next);
@@ -761,6 +815,12 @@ export default function StatusMatcher() {
   const setMultiGroupOption = (option: GroupOption, on: boolean, base: Record<string, { value?: any; comment?: string }>) => {
     if (!option.key) return base;
     const current = base[option.key]?.value;
+    if (option.listValue) {
+      return {
+        ...base,
+        [option.key]: { ...(base[option.key] || {}), value: toggledListValue(current, option.value, on) },
+      };
+    }
     if (!on && current !== option.value) return base;
     return {
       ...base,
@@ -1151,8 +1211,8 @@ export default function StatusMatcher() {
   // (食べ残し + 体調) is saved right away — one tap, no separate 保存 press.
   const applyNoIssues = () => {
     if (savingRecordRef.current) return;
-    const tabenokoshi = GROUP_TARGET_FIELDS.find((g) => g.field_key === "__tabenokoshi")!;
-    const taicho = GROUP_TARGET_FIELDS.find((g) => g.field_key === "__taicho")!;
+    const tabenokoshi = getGroupTargetFields().find((g) => g.field_key === "__tabenokoshi")!;
+    const taicho = getGroupTargetFields().find((g) => g.field_key === "__taicho")!;
     const v = valuesRef.current;
     const next = { ...v };
     // Clear every 食べ残し and 体調 choice first…
@@ -1182,15 +1242,11 @@ export default function StatusMatcher() {
   };
 
   // Choices shown on screen for the active Target Field when it's a click-choice
-  // picker (食べ残し / 体調 / うけとり) — empty for any other focus.
+  // picker (every category from the master) — empty for any other focus.
   const activeTargetChoices = (): string[] => {
     const key = focusKeyRef.current;
-    const group = GROUP_TARGET_FIELDS.find((g) => g.field_key === key);
+    const group = getGroupTargetFields().find((g) => g.field_key === key);
     if (group) return groupAllOptions(group.options).map((o) => o.label);
-    if (key === "uketori") {
-      const f = fields.find((x) => x.field_key === key);
-      if (f) return uketoriOptions(f);
-    }
     return [];
   };
 
@@ -1198,7 +1254,7 @@ export default function StatusMatcher() {
   // tapping that choice would, then moves the flow on. Returns false if the
   // utterance isn't one of its choices.
   const answerTargetChoice = (rawFinal: string): boolean => {
-    const activeGroup = GROUP_TARGET_FIELDS.find((g) => g.field_key === focusKeyRef.current);
+    const activeGroup = getGroupTargetFields().find((g) => g.field_key === focusKeyRef.current);
     if (activeGroup?.multiple && NEXT_FIELD_COMMAND.test(normalizeJa(rawFinal))) {
       proceedToNextTargetField(activeGroup.field_key);
       return true;
@@ -1215,6 +1271,10 @@ export default function StatusMatcher() {
       const removing = MULTI_REMOVE_SUFFIX.test(folded);
       const spoken = removing ? folded.replace(MULTI_REMOVE_SUFFIX, "") : rawFinal;
       const all = groupAllOptions(activeGroup.options);
+      // This field stays open for more answers, so the same words must be
+      // accepted again (a retry after a miss, or re-picking an option that was
+      // tapped off). Repeats are harmless here: voice only sets, never toggles.
+      lastFinalRef.current = "";
       const labels = matchChoicesMulti(spoken, all.map((o) => o.label));
       if (!labels.length) return false;
       const picked = labels.map((l) => all.find((o) => o.label === l)!);
@@ -1240,7 +1300,7 @@ export default function StatusMatcher() {
     const choice = matchChoice(rawFinal, activeTargetChoices());
     if (!choice) return false;
     const key = focusKeyRef.current;
-    const group = GROUP_TARGET_FIELDS.find((g) => g.field_key === key);
+    const group = getGroupTargetFields().find((g) => g.field_key === key);
     if (group) {
       const option = groupAllOptions(group.options).find((o) => o.label === choice)!;
       if (group.field_key === "__tabenokoshi" && option.key === NO_ISSUES_KEY) {
@@ -1278,7 +1338,7 @@ export default function StatusMatcher() {
       };
     } else if (activeTargetChoices().length) {
       const choices = activeTargetChoices();
-      const multi = GROUP_TARGET_FIELDS.find((g) => g.field_key === focusKeyRef.current)?.multiple;
+      const multi = getGroupTargetFields().find((g) => g.field_key === focusKeyRef.current)?.multiple;
       isAnswer = (t) =>
         (multi ? matchChoicesMulti(t, choices).length > 0 : matchChoice(t, choices) !== null) ||
         NEXT_FIELD_COMMAND.test(normalizeJa(t));
@@ -1393,25 +1453,20 @@ export default function StatusMatcher() {
       return;
     }
 
-    // On a screen with Target Field entries (うけとり / 食べ残し / 体調), voice may
-    // only switch between those entries — a spoken word that happens to name one
-    // of the hidden report columns (メモ, 半分, 完食, …) must never become the
-    // displayed Target Field. If that column belongs to the current field, it's
-    // taken as the answer (完食 → なし, 残し → あり, …).
+    // On a screen with Target Field entries (うけとり / 食べ残し / 体調), voice
+    // only fills in answers: saying a category name never switches the screen
+    // to another section (the screen stays where it is while speaking), and a
+    // spoken word that happens to name one of the hidden report columns (メモ,
+    // 半分, 完食, …) never becomes the displayed Target Field. If that column
+    // belongs to the current field, it's taken as the answer (完食 → なし, …).
     if (pickerFields.length) {
-      const pickerMatch = bestFieldMatch(rawFinal, pickerFields as unknown as Field[]);
-      if (pickerMatch && pickerMatch.field_key !== focusKeyRef.current) {
-        setFocusKey(pickerMatch.field_key);
-        focusKeyRef.current = pickerMatch.field_key;
-        setStatusMsg(`➡ ${pickerMatch.field_label} に切り替えました`);
-        setMatchStatus("none");
-        setMatches([]);
-        return;
-      }
       const hiddenMatch = bestFieldMatch(rawFinal, fields);
       if (hiddenMatch) {
-        const activeGroup = GROUP_TARGET_FIELDS.find((g) => g.field_key === focusKeyRef.current);
-        const leaf = activeGroup && groupLeafOptions(activeGroup.options).find((o) => o.key === hiddenMatch.field_key);
+        const activeGroup = getGroupTargetFields().find((g) => g.field_key === focusKeyRef.current);
+        // Only a column that exactly one option saves into (完食 → なし, …);
+        // a category's own column is shared by all its options.
+        const leaves = activeGroup ? groupLeafOptions(activeGroup.options).filter((o) => o.key === hiddenMatch.field_key) : [];
+        const leaf = leaves.length === 1 ? leaves[0] : undefined;
         if (!(leaf && selectedPatientRef.current && answerTargetChoice(leaf.label))) {
           setStatusMsg("候補に一致しませんでした");
         }
@@ -1436,7 +1491,7 @@ export default function StatusMatcher() {
 
     if (/^コメント/.test(rawFinal)) {
       const comment = rawFinal.replace(/^コメント[:：]?\s*/, "");
-      const group = GROUP_TARGET_FIELDS.find((g) => g.field_key === focusKeyRef.current);
+      const group = getGroupTargetFields().find((g) => g.field_key === focusKeyRef.current);
       const currentKey = group ? group.anchorKey : focusKeyRef.current;
       const label = group ? group.field_label : fields.find((f) => f.field_key === currentKey)?.field_label;
       if (label) {
@@ -1600,12 +1655,18 @@ export default function StatusMatcher() {
             <QrCodeScan size="1em" />
             <span>QR読取</span>
           </button>
-          {selectedPatient && allTargetFieldsAnswered && (
+          {/* Always laid out (just invisible until every field is answered),
+              so it appearing after a voice answer never re-wraps the toolbar
+              and pushes the screen down. */}
+          {selectedPatient && (
             <button
               type="button"
               className={`btn btn-success ms-auto px-4 fw-bold ${styles.photoUploadBtn} ${styles.toolbarBtn} ${styles.primaryBtn}`}
+              style={allTargetFieldsAnswered ? undefined : { visibility: "hidden" }}
+              aria-hidden={!allTargetFieldsAnswered}
+              tabIndex={allTargetFieldsAnswered ? undefined : -1}
               onClick={() => handleSaveRecord()}
-              disabled={savingRecord}
+              disabled={savingRecord || !allTargetFieldsAnswered}
               aria-busy={savingRecord}
             >
               {savingRecord
@@ -1743,7 +1804,12 @@ export default function StatusMatcher() {
                         <span className="badge bg-primary me-2 rounded-pill">🎯</span>
                         {focusGroupField.field_label}
                       </h6>
-                      <div className="list-group list-group-flush">
+                      {/* --rows: rows shown (options + follow-ups, at least 5) so they
+                          all fit without scrolling (see the CSS row height). */}
+                      <div
+                        className="list-group list-group-flush"
+                        style={{ "--rows": Math.max(5, focusGroupField.options.reduce((n, o) => n + 1 + (o.next?.length ?? 0), 0)) } as React.CSSProperties}
+                      >
                         {focusGroupField.options.map((o) => {
                           const isSelected = isGroupOptionSelected(o, values);
                           const isNoIssues = focusGroupField.field_key === "__tabenokoshi" && o.key === NO_ISSUES_KEY;
@@ -1809,7 +1875,7 @@ export default function StatusMatcher() {
                 )}
 
                 {/* Manual input, in addition to voice */}
-                {focusField && focusField.field_type === "checkbox" && (() => {
+                {focusField && !focusGroupField && focusField.field_type === "checkbox" && (() => {
                   const isChecked = values[focusField.field_key]?.value === true;
                   return (
                     <div
@@ -1828,19 +1894,20 @@ export default function StatusMatcher() {
                   );
                 })()}
 
-                {focusField && focusField.field_type === "preset" && (() => {
-                  const presetOptions = focusField.field_key === "uketori" ? uketoriOptions(focusField) : (focusField.phrases ?? []);
+                {focusField && !focusGroupField && focusField.field_type === "preset" && (() => {
+                  const presetOptions: string[] = focusField.phrases ?? [];
                   if (!presetOptions.length) return null;
                   return (
                   <div key={`preset-${focusField.field_key}`} className="card border-0 shadow-sm rounded-4 mt-1">
                     <div className="card-body">
                       <h6 className={`card-title d-flex align-items-center mb-1 ${styles.choiceTitle}`}>
                         <span className="badge bg-primary me-2 rounded-pill">🎯</span>
-                        {focusField.field_key === "uketori"
-                          ? uketoriTitle
-                          : `${focusField.field_label} の候補（クリックで選択、${presetOptions.length}件）`}
+                        {`${focusField.field_label} の候補（クリックで選択、${presetOptions.length}件）`}
                       </h6>
-                      <div className="list-group list-group-flush">
+                      <div
+                        className="list-group list-group-flush"
+                        style={{ "--rows": Math.max(5, presetOptions.length) } as React.CSSProperties}
+                      >
                         {presetOptions.map((p) => {
                           const isSelected = values[focusField.field_key]?.value === p;
                           return (
@@ -1872,7 +1939,7 @@ export default function StatusMatcher() {
                   );
                 })()}
 
-                {focusField && focusField.field_type === "text" && (
+                {focusField && !focusGroupField && focusField.field_type === "text" && (
                   <div key={`text-${focusField.field_key}`} className="mt-1">
                     <label className="form-label fw-semibold text-muted text-uppercase small mb-1">
                       値（手入力）
@@ -1921,27 +1988,23 @@ export default function StatusMatcher() {
         </div>
       )}
 
-      {transcript && (
-        <div className={styles.transcriptBox}>
-          <p>{transcript}</p>
-        </div>
-      )}
-      {/* The status message bar is hidden from view. statusMsg is still set
-          everywhere as before; it just isn't displayed. */}
-
-      {awaitingSaveConfirm && (
-        <div className="d-flex gap-2 justify-content-center">
-          <button type="button" className={`btn btn-success ${styles.photoUploadBtn} ${styles.toolbarBtn} ${styles.primaryBtn}`} onClick={confirmSaveYes} disabled={savingRecord}>
-            <FloppyFill size="1em" />
-            はい（保存する）
-          </button>
-          <button type="button" className={`btn btn-outline-primary ${styles.toolbarBtn} ${styles.secondaryBtn}`} onClick={confirmSaveNo} disabled={savingRecord}>
-            いいえ
-          </button>
-        </div>
-      )}
-
+      {/* No transcript strip: the space goes to the choice list. The status
+          message bar is hidden too; statusMsg is still set, just not shown. */}
       <div className={styles.controls}>
+        {/* 保存しますか？ — はい / いいえ sit either side of the mic (overlaid,
+            so they appearing never moves anything else on screen). */}
+        {awaitingSaveConfirm && (
+          <button
+            key="confirm-yes"
+            type="button"
+            className={`btn btn-success ${styles.photoUploadBtn} ${styles.toolbarBtn} ${styles.primaryBtn} ${styles.confirmYes}`}
+            onClick={confirmSaveYes}
+            disabled={savingRecord}
+          >
+            <FloppyFill size="1em" />
+            <span>はい</span>
+          </button>
+        )}
         <button
           className={`${styles.micButton} ${isListening ? styles.isListening : ""}`}
           onClick={isListening ? handleStopListening : handleStartListening}
@@ -1950,14 +2013,23 @@ export default function StatusMatcher() {
         >
           {isListening ? <StopFill size={28} /> : <MicFill size={28} />}
         </button>
-        {isSearching && <p className={styles.statusText}>検索中…</p>}
+        {awaitingSaveConfirm ? (
+          <button
+            key="confirm-no"
+            type="button"
+            className={`btn btn-outline-primary ${styles.toolbarBtn} ${styles.secondaryBtn} ${styles.confirmNo}`}
+            onClick={confirmSaveNo}
+            disabled={savingRecord}
+          >
+            いいえ
+          </button>
+        ) : (
+          isSearching && <p key="searching" className={`${styles.statusText} ${styles.statusTextFloat}`}>検索中…</p>
+        )}
       </div>
 
-      {selectedPatient && matchStatus === "match" && (
-        <div className="alert alert-success rounded-4 shadow-sm border-0 text-center">
-          🎯 候補 {matches.length} 件の中から最適なものを選択しました
-        </div>
-      )}
+      {/* The 「候補 n 件…」 match alert is no longer shown: popping in under
+          the mic after a voice answer shifted the whole screen. */}
 
     </div>
   );

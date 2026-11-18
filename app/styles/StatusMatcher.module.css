@@ -341,6 +341,10 @@ button.toolbarBtn > svg {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  /* Never squeezed by the option list below it (overflow: hidden would
+     otherwise let the flex column shrink it and clip the text). */
+  flex-shrink: 0;
+  line-height: 1.3;
 }
 
 /* The choice card sits inside .targetBox, which already has its own padding —
@@ -403,8 +407,8 @@ button.toolbarBtn > svg {
 }
 
 .choiceLabel {
-  /* About half the row height, 16–22px. */
-  font-size: clamp(16px, calc(var(--row-h, 52px) * 0.5), 22px);
+  /* A little over half the row height, 18–24px. */
+  font-size: clamp(18px, calc(var(--row-h, 52px) * 0.55), 24px);
   font-weight: 400;
   line-height: 1.2;
 }
@@ -468,6 +472,32 @@ button.toolbarBtn > svg {
   overflow: hidden;
 }
 
+/* Fixed-height home for the transcript / はい・いいえ — always laid out, so
+   speaking never resizes the panels above it. */
+.voiceSlot {
+  flex: 0 0 auto;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+}
+
+.voiceSlot > .transcriptBox {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  padding-top: 0.25rem;
+  padding-bottom: 0.25rem;
+}
+
+/* One line, cut off with … — a long utterance never makes the box taller. */
+.voiceSlot > .transcriptBox p {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .transcriptBox::before {
   content: '';
   position: absolute;
@@ -494,10 +524,38 @@ button.toolbarBtn > svg {
 }
 
 .controls {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 0.25rem;
+}
+
+/* 保存しますか？ はい / いいえ — overlaid either side of the mic. */
+.confirmYes,
+.confirmNo {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  white-space: nowrap;
+  min-width: 96px;
+}
+
+.confirmYes {
+  right: calc(50% + 52px);
+}
+
+.confirmNo {
+  left: calc(50% + 52px);
+}
+
+/* 検索中… sits beside the mic instead of adding a line under it. */
+.statusTextFloat {
+  position: absolute;
+  top: 50%;
+  left: calc(50% + 48px);
+  transform: translateY(-50%);
+  white-space: nowrap;
 }
 
 .micButton {
@@ -750,6 +808,10 @@ button.toolbarBtn > svg {
     height: 68px;
   }
 
+  .voiceSlot {
+    height: 46px;
+  }
+
   /* <main> has a smaller bottom padding on phones. */
   .wrapper {
     height: calc(100vh - var(--header-h, 80px) - 0.75rem);
@@ -827,6 +889,8 @@ button.toolbarBtn > svg {
   min-height: 0;
   container-type: size;
   overflow-y: auto;
+  /* Scrolling a long option list never drags the page along with it. */
+  overscroll-behavior: contain;
 }
 
 /* Everything under 対象利用者 — the choice card, or a checkbox/text input on
@@ -857,8 +921,14 @@ button.toolbarBtn > svg {
   /* Exactly one fifth of the list's height (5 rows max) so all rows always
      fit, capped so short lists don't turn into giant tiles. The label and
      the round marker scale with it (see .choiceLabel and the badge rule). */
-  /* (-1px absorbs sub-pixel rounding so the list never scrolls by a hair.) */
-  --row-h: min(120px, calc((100cqh - 4 * var(--choice-gap) - 1px) / 5));
+  /* (-1px absorbs sub-pixel rounding so the list never scrolls by a hair.)
+     --rows (set on the list) is the number of rows shown, at least 5: up to
+     5 options look as before, and a longer list shrinks its rows so every
+     option still fits on screen without scrolling. */
+  --row-h: min(
+    120px,
+    calc((100cqh - (var(--rows, 5) - 1) * var(--choice-gap) - 1px) / var(--rows, 5))
+  );
   height: var(--row-h);
   min-height: 0;
   border-radius: 14px !important;
@@ -997,6 +1067,11 @@ button.toolbarBtn > svg {
 @media (max-height: 700px) {
   .wrapper {
     gap: 0.35rem;
+  }
+
+  /* Short phones: a slimmer transcript slot leaves the choice rows more room. */
+  .voiceSlot {
+    height: 38px;
   }
 
   .scopeBar {

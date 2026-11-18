@@ -3,8 +3,8 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import ReportLayoutSettings from "./ReportLayoutSettings";
-import GroupFieldEditor from "./GroupFieldEditor";
-import UketoriEditor from "./UketoriEditor";
+import CategoryEditor, { type CategoryEditorTarget } from "./CategoryEditor";
+import { addOptions, isAddEnter } from "./optionInput";
 import {
   Container,
   Row,
@@ -24,6 +24,8 @@ import {
   Trash,
   Pencil,
   Check,
+  ArrowUp,
+  ArrowDown,
   Database,
   List,
 } from "react-bootstrap-icons";
@@ -33,42 +35,25 @@ import {
   deleteStatusField,
 } from "@/app/lib/statusApi";
 import {
-  TARGET_GROUP_DEFS,
   TARGET_GROUP_SCREEN_KEY,
-  UKETORI_FIELD_KEY,
-  storedGroupLabel,
-  storedGroupOptions,
-  uketoriLabel,
-  uketoriOptions,
+  HEADING_FIELD_TYPE,
+  HEADING_MULTI_FIELD_TYPE,
+  GROUP_MULTI_FIELD_TYPE,
+  GROUP_SINGLE_FIELD_TYPE,
+  allCategoryConfigs,
+  isGroupKey,
+  isInputCategory,
+  optionDisplayNames,
 } from "@/app/lib/targetFields";
 
-// 日次記録 main categories shown in the 登録済みフィールド list: うけとり (its
-// own master row, options editable) and 食べ残し / 体調 (each option saves
-// into a report column). All three are editable. The other daily
-// status_fields rows stay in the DB as report columns but aren't listed.
-type MasterEntry =
-  | { kind: "field"; field: Field; order: number }
-  | { kind: "group"; field_key: string; field_label: string; options: string[]; multiple?: boolean; order: number };
+// 日次記録: the 登録済みフィールド list shows the categories Status Input asks
+// (うけとり, 食べ残し, 体調 and any added here — allCategoryConfigs), and every
+// one is edited, and new ones added, with the same CategoryEditor. The other
+// daily status_fields rows stay in the DB as report columns but aren't listed.
 
-function buildDailyEntries(fields: Field[], groupRows: Field[]): MasterEntry[] {
-  const entries: MasterEntry[] = [];
-  const uketori = fields.find((f) => f.field_key === UKETORI_FIELD_KEY);
-  if (uketori) entries.push({ kind: "field", field: uketori, order: uketori.order_index });
-  for (const def of TARGET_GROUP_DEFS) {
-    const anchor = fields.find((f) => f.field_key === def.anchorKey);
-    entries.push({
-      kind: "group",
-      field_key: def.field_key,
-      field_label: storedGroupLabel(def.field_key, groupRows),
-      options: storedGroupOptions(def.field_key, groupRows).flatMap((o) =>
-        o.sub?.length ? o.sub.map((x) => `${o.label}：${x}`) : [o.label]
-      ),
-      multiple: def.multiple,
-      order: anchor?.order_index ?? Number.MAX_SAFE_INTEGER,
-    });
-  }
-  return entries.sort((a, b) => a.order - b.order);
-}
+// A 日次記録 field key: any characters (Japanese included) except spaces and
+// / ? # % \, and not starting with "__". Matches the server's check.
+const VALID_FIELD_KEY = /^(?!__)[^\s/?#%\\]+$/;
 
 interface Field {
   screen_key: string;
@@ -103,18 +88,63 @@ export default function RegisterFields() {
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [layoutTab, setLayoutTab] = useState(false);
   const [groupRows, setGroupRows] = useState<Field[]>([]);
-  // 食べ残し / 体調 being edited (its field_key), or null for the normal form.
-  // うけとり / 食べ残し / 体調 being edited (its field_key), or null for the
-  // normal form.
+  // Category being edited (its field_key), or null → the editor adds a new one.
   const [editingGroup, setEditingGroup] = useState<string | null>(null);
-  const editingLabel = editingGroup
-    ? editingGroup === UKETORI_FIELD_KEY
-      ? uketoriLabel(groupRows)
-      : storedGroupLabel(editingGroup, groupRows)
-    : "";
-  const uketoriField = fields.find((f) => f.field_key === UKETORI_FIELD_KEY);
   const isDaily = form.screen_key === "daily_status";
-  const dailyEntries = isDaily ? buildDailyEntries(fields, groupRows) : [];
+  const dailyEntries = isDaily ? allCategoryConfigs(fields, groupRows) : [];
+  const editingEntry = editingGroup ? dailyEntries.find((c) => c.field_key === editingGroup) : undefined;
+  const editingField = editingGroup
+    ? fields.find((f) => f.field_key === editingGroup && isInputCategory(f.field_key, groupRows))
+    : undefined;
+  const editorTarget: CategoryEditorTarget =
+    editingGroup && isGroupKey(editingGroup)
+      ? { kind: "group", fieldKey: editingGroup }
+      : editingField
+        ? { kind: "own", field: editingField }
+        : { kind: "new" };
+  const editingLabel = editorTarget.kind === "new" ? "" : editingEntry?.label ?? "";
+  const editingPosition = editingGroup ? dailyEntries.findIndex((c) => c.field_key === editingGroup) : -1;
+  const [reordering, setReordering] = useState(false);
+
+  // 表示順: moves a category to `to` (0-based) and saves every category's
+  // position (its daily_target row's order_index = 1, 2, 3, …). Only Status
+  // Input / this list follow it; the 報告書 column order is untouched.
+  const moveCategory = async (from: number, to: number) => {
+    if (from === to || from < 0 || to < 0 || to >= dailyEntries.length) return;
+    const ordered = [...dailyEntries];
+    const [moved] = ordered.splice(from, 1);
+    ordered.splice(to, 0, moved);
+    setReordering(true);
+    setMessage(null);
+    try {
+      for (let i = 0; i < ordered.length; i++) {
+        const c = ordered[i];
+        await saveStatusField({
+          screen_key: TARGET_GROUP_SCREEN_KEY,
+          field_key: c.field_key,
+          field_label: c.label,
+          field_type:
+            c.kind === "group"
+              ? c.multiple
+                ? GROUP_MULTI_FIELD_TYPE
+                : GROUP_SINGLE_FIELD_TYPE
+              : c.multiple
+                ? HEADING_MULTI_FIELD_TYPE
+                : HEADING_FIELD_TYPE,
+          phrases: c.options,
+          order_index: i + 1,
+        });
+      }
+      setMessage({ type: "success", text: `「${moved.label}」を${to + 1}番目にしました` });
+      await loadFields();
+    } catch (e) {
+      console.error(e);
+      setMessage({ type: "error", text: "表示順の保存に失敗しました" });
+      await loadFields();
+    } finally {
+      setReordering(false);
+    }
+  };
   const layoutDirtyRef = useRef(false);
   // Leaving the 報告書レイアウト tab with unsaved edits asks first.
   const leaveLayoutTab = () => {
@@ -157,14 +187,62 @@ export default function RegisterFields() {
   };
 
   const handleSave = async () => {
-    if (!form.field_key.trim()) {
-      setMessage({ type: "error", text: "Field key is required" });
+    const isDailyAdd = form.screen_key === "daily_status";
+    // On 日次記録 the key is optional — left blank, one is generated (it's only
+    // an internal name; the ラベル is what's shown).
+    const key = form.field_key.trim() || (isDailyAdd ? `field_${Date.now().toString(36)}` : "");
+    if (!key) {
+      setMessage({ type: "error", text: "フィールドキーを入力してください" });
       return;
+    }
+    if (isDailyAdd) {
+      // On 日次記録 this form only adds new categories (existing ones are edited
+      // from the list), so the key must be new — reusing one would overwrite a
+      // 報告書 column or a built-in category. Japanese is fine; spaces and
+      // / ? # % \ aren't (the key goes into URLs), nor a leading "__"
+      // (reserved for 食べ残し / 体調).
+      if (!VALID_FIELD_KEY.test(key)) {
+        setMessage({
+          type: "error",
+          text: "フィールドキーにスペースや / ? # % \\ は使えません（空欄にすると自動で設定されます）",
+        });
+        return;
+      }
+      if (fields.some((f) => f.field_key === key) || groupRows.some((r) => r.field_key === key)) {
+        setMessage({ type: "error", text: `フィールドキー「${key}」はすでに使われています` });
+        return;
+      }
+      if (!form.field_label.trim()) {
+        setMessage({ type: "error", text: "ラベルを入力してください" });
+        return;
+      }
+      if (form.field_type === "preset" && !form.phrases.length) {
+        setMessage({ type: "error", text: "プリセットの選択肢を1つ以上登録してください" });
+        return;
+      }
     }
     try {
       setLoading(true);
       setMessage(null);
-      await saveStatusField(form);
+      // A new 日次記録 field with no 表示順 goes after the existing ones.
+      const order =
+        isDailyAdd && !form.order_index
+          ? Math.max(0, ...fields.map((f) => f.order_index || 0)) + 1
+          : form.order_index;
+      const saved = { ...form, field_key: key, field_label: form.field_label.trim(), order_index: order };
+      await saveStatusField(saved);
+      if (isDailyAdd) {
+        // Registers it as a Status Input category (shown there and in this
+        // list); its label is the heading shown above its input.
+        await saveStatusField({
+          screen_key: TARGET_GROUP_SCREEN_KEY,
+          field_key: key,
+          field_label: saved.field_label,
+          field_type: HEADING_FIELD_TYPE,
+          phrases: [],
+          order_index: order,
+        });
+      }
       setMessage({ type: "success", text: "Field saved successfully!" });
       await loadFields();
 
@@ -178,7 +256,10 @@ export default function RegisterFields() {
       });
     } catch (e) {
       console.error(e);
-      setMessage({ type: "error", text: "Failed to save field" });
+      setMessage({
+        type: "error",
+        text: `保存に失敗しました${e instanceof Error && e.message !== "failed to save field" ? `（${e.message}）` : ""}`,
+      });
     } finally {
       setLoading(false);
     }
@@ -203,11 +284,14 @@ export default function RegisterFields() {
     }
   };
 
+  // Several can be added at once (「新聞、郵便、回覧板」); duplicates are skipped.
   const addPhrase = () => {
-    if (!newPhrase.trim()) return;
-    const updatedPhrases = [...form.phrases, newPhrase.trim()];
-    setForm({ ...form, phrases: updatedPhrases });
+    const { next, duplicates } = addOptions(form.phrases, newPhrase);
+    if (next.length !== form.phrases.length) setForm({ ...form, phrases: next });
     setNewPhrase("");
+    if (duplicates.length) {
+      setMessage({ type: "error", text: `「${duplicates.join("」「")}」はすでに登録されています` });
+    }
   };
 
   const removePhrase = (p: string) => {
@@ -284,33 +368,34 @@ export default function RegisterFields() {
                     <Card.Header style={{ fontSize: 18 }}>
                       <Database className="me-2" />
                       フィールド情報
-                      {editingGroup && <span key="editing-group">（{editingLabel}）</span>}
+                      {isDaily && (
+                        <span key="editing-group">
+                          （{editorTarget.kind === "new" ? "新規追加" : editingLabel}）
+                        </span>
+                      )}
                     </Card.Header>
                     <Card.Body>
-                      {editingGroup === UKETORI_FIELD_KEY && uketoriField ? (
-                        <UketoriEditor
-                          key={editingGroup}
-                          field={uketoriField}
-                          groupRows={groupRows}
-                          onCancel={() => setEditingGroup(null)}
-                          onSaved={async () => {
-                            setEditingGroup(null);
-                            setMessage({ type: "success", text: "Field saved successfully!" });
-                            await loadFields();
-                          }}
-                        />
-                      ) : editingGroup ? (
-                        <GroupFieldEditor
-                          key={editingGroup}
-                          fieldKey={editingGroup}
+                      {isDaily ? (
+                        <CategoryEditor
+                          key={editorTarget.kind === "new" ? "new" : editingGroup!}
+                          target={editorTarget}
                           groupRows={groupRows}
                           dailyFields={fields}
-                          onCancel={() => setEditingGroup(null)}
+                          onCancel={editorTarget.kind === "new" ? undefined : () => setEditingGroup(null)}
                           onSaved={async () => {
+                            const added = editorTarget.kind === "new";
                             setEditingGroup(null);
-                            setMessage({ type: "success", text: "Field saved successfully!" });
+                            setMessage({ type: "success", text: added ? "追加しました" : "保存しました" });
                             await loadFields();
                           }}
+                          onDeleted={async () => {
+                            setEditingGroup(null);
+                            setMessage({ type: "success", text: "削除しました" });
+                            await loadFields();
+                          }}
+                          position={editingPosition >= 0 ? editingPosition : undefined}
+                          total={dailyEntries.length}
+                          onMove={(to) => moveCategory(editingPosition, to)}
                         />
                       ) : (
                       <Form>
@@ -322,7 +407,9 @@ export default function RegisterFields() {
                                 type="text"
                                 value={form.field_key}
                                 onChange={(e) => setForm({ ...form, field_key: e.target.value })}
-                                placeholder="ユニークなキー (例: kanshoku)"
+                                placeholder={
+                                  isDaily ? "空欄で自動設定（日本語も可）" : "ユニークなキー (例: kanshoku)"
+                                }
                                 required
                               />
                             </Form.Group>
@@ -380,7 +467,7 @@ export default function RegisterFields() {
                                   <div className="d-flex flex-wrap gap-2">
                                     {form.phrases.map((p, idx) => (
                                       <Badge
-                                        key={idx}
+                                        key={p}
                                         bg="primary"
                                         className="d-flex align-items-center gap-1 py-2 px-3"
                                         style={{ fontWeight: 500 }}
@@ -401,10 +488,15 @@ export default function RegisterFields() {
 
                               <InputGroup>
                                 <Form.Control
-                                  placeholder="新しいフレーズを追加"
+                                  placeholder="選択肢を追加（「、」区切りで複数可）"
                                   value={newPhrase}
                                   onChange={(e) => setNewPhrase(e.target.value)}
-                                  onKeyPress={(e) => e.key === "Enter" && addPhrase()}
+                                  onKeyDown={(e) => {
+                                    if (isAddEnter(e)) {
+                                      e.preventDefault();
+                                      addPhrase();
+                                    }
+                                  }}
                                 />
                                 <Button variant="outline-primary" onClick={addPhrase}>
                                   <Plus />
@@ -454,37 +546,56 @@ export default function RegisterFields() {
                         </div>
                       ) : isDaily ? (
                         <div className="list-group list-group-flush scroll-panel">
-                          {dailyEntries.map((e) => {
-                            const key = e.kind === "field" ? e.field.field_key : e.field_key;
-                            const label = e.kind === "field" ? uketoriLabel(groupRows) : e.field_label;
-                            const options = e.kind === "field" ? uketoriOptions(e.field) : e.options;
+                          {dailyEntries.map((e, idx) => {
+                            const names = optionDisplayNames(e.options);
+                            const active = e.field_key === editingGroup;
                             return (
-                              <div key={key} className="list-group-item">
+                              <div key={e.field_key} className={`list-group-item ${active ? "active-entry" : ""}`}
+                                style={active ? { background: "var(--brand-50)" } : undefined}>
                                 <div className="d-flex justify-content-between align-items-start">
                                   <div className="flex-grow-1 me-2" style={{ minWidth: 0 }}>
-                                    <h6 className="mb-1">{label}</h6>
+                                    <h6 className="mb-1">
+                                      <span className="text-muted me-1">{idx + 1}.</span>
+                                      {e.label}
+                                    </h6>
                                     <div className="d-flex flex-wrap gap-1 mb-1">
-                                      {options.map((o) => (
+                                      {names.map((o) => (
                                         <Badge key={o} bg="light" text="dark" className="border fw-normal">
                                           {o}
                                         </Badge>
                                       ))}
                                     </div>
                                     <small className="text-muted">
-                                      {e.kind === "field"
-                                        ? `単一選択 • ${options.length}選択肢`
-                                        : `${e.multiple ? "複数選択可" : "単一選択"} • ${options.length}選択肢`}
+                                      {`${e.multiple ? "複数選択" : "単一選択"} • ${names.length}選択肢`}
                                     </small>
                                   </div>
-                                  <div className="flex-shrink-0 d-flex">
+                                  <div className="flex-shrink-0 d-flex gap-1">
+                                    <Button
+                                      variant="outline-secondary"
+                                      size="sm"
+                                      onClick={() => moveCategory(idx, idx - 1)}
+                                      disabled={reordering || idx === 0}
+                                      aria-label={`${e.label}を上へ`}
+                                    >
+                                      <ArrowUp />
+                                    </Button>
+                                    <Button
+                                      variant="outline-secondary"
+                                      size="sm"
+                                      onClick={() => moveCategory(idx, idx + 1)}
+                                      disabled={reordering || idx === dailyEntries.length - 1}
+                                      aria-label={`${e.label}を下へ`}
+                                    >
+                                      <ArrowDown />
+                                    </Button>
                                     <Button
                                       variant="outline-primary"
                                       size="sm"
                                       onClick={() => {
                                         setMessage(null);
-                                        setEditingGroup(e.kind === "field" ? e.field.field_key : e.field_key);
+                                        setEditingGroup(e.field_key);
                                       }}
-                                      aria-label={`${label}を編集`}
+                                      aria-label={`${e.label}を編集`}
                                     >
                                       <Pencil />
                                     </Button>
