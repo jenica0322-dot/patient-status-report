@@ -58,6 +58,37 @@ const saveStatusField = async (req, res) => {
     if (!screen_key || !field_key)
       return res.status(400).json({ error: "screen_key and field_key required" });
 
+    // 日次記録 keys are report columns / record keys and go into URLs (DELETE
+    // /status-fields/:screenKey/:fieldKey): any characters, Japanese included,
+    // except spaces and / ? # % \. A leading "__" is reserved for the built-in
+    // 食べ残し / 体調 rows under daily_target.
+    if (screen_key === "daily_status" || screen_key === "daily_target") {
+      const ok =
+        /^[^\s/?#%\\]+$/.test(field_key) &&
+        (screen_key === "daily_target" || !field_key.startsWith("__"));
+      if (!ok) return res.status(400).json({ error: "フィールドキーにスペースや / ? # % \\ は使えません" });
+    }
+
+    // A brand-new 日次記録 field is also registered as a Status Input category
+    // (its daily_target heading row = the label shown above its input), so it
+    // appears on the input screen and in マスター's list whichever client
+    // saved it. Existing fields (e.g. うけとり's options being updated) are
+    // left as they are.
+    if (screen_key === "daily_status") {
+      const exists = await pool.query(
+        `SELECT 1 FROM status_fields WHERE screen_key='daily_status' AND field_key=$1`,
+        [field_key]
+      );
+      if (!exists.rows.length) {
+        await pool.query(
+          `INSERT INTO status_fields (screen_key, field_key, field_label, field_type, phrases, order_index)
+           VALUES ('daily_target', $1, $2, 'heading', '[]', $3)
+           ON CONFLICT (screen_key, field_key) DO NOTHING`,
+          [field_key, field_label, order_index]
+        );
+      }
+    }
+
     await pool.query(
       `INSERT INTO status_fields (screen_key, field_key, field_label, field_type, phrases, order_index)
        VALUES ($1,$2,$3,$4,$5,$6)

@@ -104,12 +104,15 @@ export async function saveStatusField(field: any) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(field),
   });
-  if (!r.ok) throw new Error("failed to save field");
+  if (!r.ok) {
+    const body = await r.json().catch(() => null);
+    throw new Error(body?.error || "failed to save field");
+  }
   return r.json();
 }
 
 export async function deleteStatusField(screen_key: string, field_key: string) {
-  const r = await fetch(`${API_BASE}/api/status-fields/${screen_key}/${field_key}`, {
+  const r = await fetch(`${API_BASE}/api/status-fields/${encodeURIComponent(screen_key)}/${encodeURIComponent(field_key)}`, {
     method: "DELETE",
   });
   if (!r.ok) throw new Error("failed to delete field");
