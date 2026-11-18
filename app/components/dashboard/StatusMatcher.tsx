@@ -22,6 +22,20 @@ import QRScanner from "@/app/components/dashboard/QRScanner";
 import { normalizeSpokenDigits, toHiragana } from "@/app/lib/voiceText";
 import { findPatientByTargetUserId, parseTargetUserId } from "@/app/lib/qrTargetUser";
 import { consumeVoiceFlowResume } from "@/app/lib/voiceFlowResume";
+import {
+  GROUP_TARGET_FIELDS,
+  NO_ISSUES_KEY,
+  TARGET_GROUP_SCREEN_KEY,
+  UKETORI_DEFAULT_LABEL,
+  buildGroupTargetFields,
+  choiceSpellings,
+  groupAllOptions,
+  setGroupTargetFields,
+  uketoriLabel,
+  uketoriOptions,
+  type GroupOption,
+  type GroupTargetField,
+} from "@/app/lib/targetFields";
 
 declare global {
   interface Window {
@@ -191,46 +205,8 @@ const MUTUALLY_EXCLUSIVE_FIELD_GROUPS: string[][] = [
   ["kanshoku", "hanbun", "nokoshi", "mondai_nashi"], // 完食 / 半分 / 残し / 問題なし
 ];
 
-// Click choices shown for うけとり in place of its stored phrases. The chosen
-// label itself is what gets saved to the uketori field.
-const UKETORI_OPTIONS = ["玄関", "家族", "不在"];
-
-// Picker-only Target Fields that sit in front of an existing report column group
-// and save into those columns. Picking an option sets its own column and clears
-// whatever another option in the same picker had set, so only the final choice
-// stays in the report. `next` shows a follow-up choice instead of saving.
-// `multiple` pickers instead toggle each option on/off independently and only
-// move on to the next Target Field when 次へ is said.
-type GroupOption = { label: string; key?: string; value?: any; next?: GroupOption[] };
-type GroupTargetField = { field_key: string; field_label: string; anchorKey: string; options: GroupOption[]; multiple?: boolean };
-
-const GROUP_TARGET_FIELDS: GroupTargetField[] = [
-  {
-    field_key: "__tabenokoshi",
-    field_label: "食べ残し",
-    anchorKey: "kanshoku",
-    options: [
-      { label: "なし", key: "kanshoku", value: true },
-      { label: "半分", key: "hanbun", value: true },
-      { label: "あり", key: "nokoshi", value: true },
-      // Picking this also checks 完食, clears 体調, skips that step and saves
-      // the record at once (see applyNoIssues).
-      { label: "問題なし", key: "mondai_nashi", value: true },
-    ],
-  },
-  {
-    field_key: "__taicho",
-    field_label: "体調",
-    anchorKey: "shokuyoku_teika",
-    multiple: true,
-    options: [
-      { label: "食欲低下", key: "shokuyoku_teika", value: true },
-      { label: "顔色・元気", key: "kaoiro_genki", value: true },
-      { label: "ふらつき", key: "furatsuki", value: true },
-      { label: "体調他", next: [{ label: "風邪", key: "taicho_ta", value: "風邪" }] },
-    ],
-  },
-];
+// うけとり / 食べ残し / 体調 definitions are shared with the マスター screen
+// (app/lib/targetFields.ts). うけとり's choices come from its master phrases.
 
 // 「問題なし」 on the 食べ残し picker (its own 問題なし report column): also
 // records no 体調 issues and skips the 体調 step (saving is still 保存). The
@@ -239,14 +215,8 @@ const GROUP_TARGET_FIELDS: GroupTargetField[] = [
 const NO_ISSUES_LABEL = "問題なし";
 const NO_ISSUES_COMMAND = /^(問題(なし|無し|ない|ありません)|もんだい(なし|ない|ありません))\.*$/;
 
-// Heading shown above each Target Field's choice list. Display only — the
-// field_label itself is unchanged, since the voice-over speaks it and spoken
-// field names are matched against it.
-const CHOICE_HEADINGS: Record<string, string> = {
-  uketori: "うけとり状況を選択",
-  __tabenokoshi: "食べ残し状況を選択",
-  __taicho: "体調を選択（複数選択可）",
-};
+// The heading above each choice list is the category's マスター label
+// (うけとり状況を選択 / 食べ残し状況を選択 / 体調を選択（複数選択可）).
 
 // Target Field dropdown entries: only うけとり and the picker-only group fields
 // (食べ残し / 体調), each group placed where its first column sits.
@@ -267,28 +237,70 @@ const NEXT_FIELD_COMMAND = /^(次|つぎ|次へ|つぎへ|以上|いじょう|ne
 
 // Every choice a picker-only Target Field shows, including follow-up choices
 // (体調他 → 風邪), so a spoken answer can be matched against any of them.
-function groupAllOptions(options: GroupOption[]): GroupOption[] {
-  return options.flatMap((o) => (o.next ? [o, ...groupAllOptions(o.next)] : [o]));
-}
+
+// Spoken text / labels compared for choice matching: punctuation and ・
+// dropped, katakana folded to hiragana (フラツキ → ふらつき).
+const foldChoiceText = (t: string) =>
+  normalizeJa(t)
+    .replace(/[.・･\/／!！?？「」]/g, "")
+    .replace(/[ァ-ヶ]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0x60));
 
 // Matches a spoken answer to one of the choices shown for the active Target
 // Field — exact (normalized) first, otherwise the closest choice that's still
 // clearly similar. Returns null when nothing is close enough.
+// Each choice is also tried under its other spellings (kana reading, common
+// mis-hearings — see CHOICE_READINGS), so 「かぜ」 picks 風邪.
 function matchChoice(utterance: string, choices: string[]): string | null {
-  const cleaned = normalizeJa(utterance);
+  const cleaned = foldChoiceText(utterance);
   if (!cleaned) return null;
   let best: { choice: string; score: number } | null = null;
   for (const choice of choices) {
-    const cleanedChoice = normalizeJa(choice);
-    if (!cleanedChoice) continue;
-    if (cleaned === cleanedChoice) return choice;
-    const dist = levenshteinDistance(cleaned, cleanedChoice);
-    const maxLen = Math.max(cleaned.length, cleanedChoice.length);
-    const sim = ((maxLen - dist) / maxLen) * 100;
-    if (!best || sim > best.score) best = { choice, score: sim };
+    for (const spelling of choiceSpellings(choice)) {
+      const cleanedChoice = foldChoiceText(spelling);
+      if (!cleanedChoice) continue;
+      if (cleaned === cleanedChoice) return choice;
+      const dist = levenshteinDistance(cleaned, cleanedChoice);
+      const maxLen = Math.max(cleaned.length, cleanedChoice.length);
+      const sim = ((maxLen - dist) / maxLen) * 100;
+      if (!best || sim > best.score) best = { choice, score: sim };
+    }
   }
   return best && best.score >= 60 ? best.choice : null;
 }
+
+// For a multiple-choice picker (体調): every choice named in one utterance,
+// in the order spoken — "食欲低下とふらつき" → [食欲低下, ふらつき]. Labels (and
+// their other spellings, e.g. かぜ for 風邪) are found as substrings first;
+// parts split on と/や/、 etc. that hold none are fuzzy-matched on their own.
+function matchChoicesMulti(utterance: string, choices: string[]): string[] {
+  const u = foldChoiceText(utterance);
+  if (!u) return [];
+  const found = choices
+    .flatMap((choice) => choiceSpellings(choice).map((sp) => ({ choice, k: foldChoiceText(sp) })))
+    .filter(({ k }) => k && u.includes(k))
+    .map(({ choice, k }) => ({ choice, k, idx: u.indexOf(k) }));
+  // Drop a match that only sits inside a longer match of another choice
+  // (e.g. 「体調」 inside 「体調他」).
+  const kept = found.filter(
+    (a) => !found.some((b) => b.choice !== a.choice && b.k.length > a.k.length && b.k.includes(a.k))
+  );
+  const out: string[] = [];
+  for (const f of kept.sort((a, b) => a.idx - b.idx)) if (!out.includes(f.choice)) out.push(f.choice);
+  // Parts that didn't contain an exact label (a misheard word, e.g. 食欲低か)
+  // are fuzzy-matched on their own.
+  const parts = utterance.split(/[、,，・\s]+|それと|そして|あと|と|や/).filter((x) => x.trim().length >= 2);
+  for (const part of parts.length ? parts : [utterance]) {
+    const fp = foldChoiceText(part);
+    if (kept.some((f) => fp.includes(f.k))) continue;
+    const c = matchChoice(part, choices);
+    if (c && !out.includes(c)) out.push(c);
+  }
+  return out;
+}
+
+// "ふらつき取り消し" / "ふらつき解除" — unselects the named choice(s) on a
+// multiple-choice picker instead of adding them.
+const MULTI_REMOVE_SUFFIX = /(を)?(取り消し|取消し?|とりけし|解除|かいじょ|キャンセル|消して|けして)$/;
 
 function isGroupOptionSelected(option: GroupOption, values: Record<string, { value?: any; comment?: string }>): boolean {
   if (option.next) return option.next.some((n) => isGroupOptionSelected(n, values));
@@ -411,6 +423,8 @@ export default function StatusMatcher() {
 
   const [fields, setFields] = useState<Field[]>([]);
   const [focusKey, setFocusKey] = useState<string>("");
+  // うけとり's heading — its マスター label (daily_target row).
+  const [uketoriTitle, setUketoriTitle] = useState(UKETORI_DEFAULT_LABEL);
   const [values, setValues] = useState<Record<string, { value?: any; comment?: string }>>({});
   const [isListening, setIsListening] = useState(false);
   const [transcript, setTranscript] = useState("");
@@ -522,6 +536,14 @@ export default function StatusMatcher() {
   useEffect(() => {
     (async () => {
       const rows = await fetchStatusFields(screenKey);
+      // 食べ残し / 体調 label and options come from the master too (falling
+      // back to the built-in ones if they can't be loaded). Set before
+      // setFields so the re-render already sees them.
+      if (screenKey === "daily_status") {
+        const groupRows = await fetchStatusFields(TARGET_GROUP_SCREEN_KEY).catch(() => []);
+        setGroupTargetFields(buildGroupTargetFields(groupRows, rows));
+        setUketoriTitle(uketoriLabel(groupRows));
+      }
       setFields(rows);
       // Start on the first Target Field entry (うけとり) rather than the first
       // master row (利用者選択); screens without entries keep the first row.
@@ -684,7 +706,9 @@ export default function StatusMatcher() {
   const isPatientSelectField = focusField?.field_label === PATIENT_SELECT_FIELD_LABEL;
   const focusGroupField = useMemo(
     () => GROUP_TARGET_FIELDS.find((g) => g.field_key === focusKey),
-    [focusKey]
+    // `fields` too: the groups are reloaded from the master alongside it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [focusKey, fields]
   );
   const pickerFields = useMemo(() => buildPickerFields(fields), [fields]);
   // Where the comment box reads/writes for the focused Target Field. Picker-only
@@ -730,6 +754,18 @@ export default function StatusMatcher() {
     valuesRef.current = next;
     setValues(next);
     setStatusMsg(`${group.field_label}: 「${option.label}」を記録しました`);
+  };
+
+  // Turns one option of a `multiple` picker on or off (voice answers) — unlike a
+  // tap it never toggles, so naming an already-picked option keeps it picked.
+  const setMultiGroupOption = (option: GroupOption, on: boolean, base: Record<string, { value?: any; comment?: string }>) => {
+    if (!option.key) return base;
+    const current = base[option.key]?.value;
+    if (!on && current !== option.value) return base;
+    return {
+      ...base,
+      [option.key]: { ...(base[option.key] || {}), value: on ? option.value : option.value === true ? false : "" },
+    };
   };
 
   useEffect(() => {
@@ -908,7 +944,7 @@ export default function StatusMatcher() {
     setMatchStatus("none");
     setMatches([]);
     setStatusMsg(`➡ ${field.field_label} を確認します`);
-    speak(field.field_label);
+    speak("spokenLabel" in field ? field.spokenLabel : field.field_label);
   };
 
   // Asks the final "保存しますか？" once every Target Field has been answered.
@@ -1151,7 +1187,10 @@ export default function StatusMatcher() {
     const key = focusKeyRef.current;
     const group = GROUP_TARGET_FIELDS.find((g) => g.field_key === key);
     if (group) return groupAllOptions(group.options).map((o) => o.label);
-    if (key === "uketori" && fields.some((f) => f.field_key === key)) return UKETORI_OPTIONS;
+    if (key === "uketori") {
+      const f = fields.find((x) => x.field_key === key);
+      if (f) return uketoriOptions(f);
+    }
     return [];
   };
 
@@ -1168,13 +1207,43 @@ export default function StatusMatcher() {
       applyNoIssues();
       return true;
     }
+    // 体調 (multiple choice): every option named is added to what's already
+    // picked — several can be said at once — and 「…取り消し」 unselects. The
+    // flow stays on this field until 次へ.
+    if (activeGroup?.multiple) {
+      const folded = foldChoiceText(rawFinal);
+      const removing = MULTI_REMOVE_SUFFIX.test(folded);
+      const spoken = removing ? folded.replace(MULTI_REMOVE_SUFFIX, "") : rawFinal;
+      const all = groupAllOptions(activeGroup.options);
+      const labels = matchChoicesMulti(spoken, all.map((o) => o.label));
+      if (!labels.length) return false;
+      const picked = labels.map((l) => all.find((o) => o.label === l)!);
+      const leaves = picked.filter((o) => !o.next);
+      // Only a parent (体調他) named: ask for one of its follow-ups.
+      if (!leaves.length) {
+        const parent = picked[0];
+        lastFinalRef.current = "";
+        setStatusMsg(`${activeGroup.field_label}: 「${parent.label}」— ${parent.next!.map((n) => n.label).join("・")} から選んでください`);
+        return true;
+      }
+      let next = valuesRef.current;
+      for (const o of leaves) next = setMultiGroupOption(o, !removing, next);
+      valuesRef.current = next;
+      setValues(next);
+      setMatchStatus("match");
+      const names = leaves.map((o) => `「${o.label}」`).join("");
+      setStatusMsg(
+        `${activeGroup.field_label}: ${names}を${removing ? "外しました" : "記録しました"}（続けて選択できます・「次へ」で次の項目へ）`
+      );
+      return true;
+    }
     const choice = matchChoice(rawFinal, activeTargetChoices());
     if (!choice) return false;
     const key = focusKeyRef.current;
     const group = GROUP_TARGET_FIELDS.find((g) => g.field_key === key);
     if (group) {
       const option = groupAllOptions(group.options).find((o) => o.label === choice)!;
-      if (group.field_key === "__tabenokoshi" && option.label === NO_ISSUES_LABEL) {
+      if (group.field_key === "__tabenokoshi" && option.key === NO_ISSUES_KEY) {
         applyNoIssues();
         return true;
       }
@@ -1209,7 +1278,10 @@ export default function StatusMatcher() {
       };
     } else if (activeTargetChoices().length) {
       const choices = activeTargetChoices();
-      isAnswer = (t) => matchChoice(t, choices) !== null || NEXT_FIELD_COMMAND.test(normalizeJa(t));
+      const multi = GROUP_TARGET_FIELDS.find((g) => g.field_key === focusKeyRef.current)?.multiple;
+      isAnswer = (t) =>
+        (multi ? matchChoicesMulti(t, choices).length > 0 : matchChoice(t, choices) !== null) ||
+        NEXT_FIELD_COMMAND.test(normalizeJa(t));
     } else if (fields.find((f) => f.field_key === focusKeyRef.current)?.field_type === "checkbox") {
       isAnswer = isCheckboxAnswer;
     }
@@ -1669,13 +1741,12 @@ export default function StatusMatcher() {
                     <div className="card-body">
                       <h6 className={`card-title d-flex align-items-center mb-1 ${styles.choiceTitle}`}>
                         <span className="badge bg-primary me-2 rounded-pill">🎯</span>
-                        {CHOICE_HEADINGS[focusGroupField.field_key] ??
-                          `${focusGroupField.field_label} の候補（${focusGroupField.multiple ? "複数選択可" : "クリックで選択"}）`}
+                        {focusGroupField.field_label}
                       </h6>
                       <div className="list-group list-group-flush">
                         {focusGroupField.options.map((o) => {
                           const isSelected = isGroupOptionSelected(o, values);
-                          const isNoIssues = focusGroupField.field_key === "__tabenokoshi" && o.label === NO_ISSUES_LABEL;
+                          const isNoIssues = focusGroupField.field_key === "__tabenokoshi" && o.key === NO_ISSUES_KEY;
                           // Follow-up choices (e.g. 風邪 under 体調他) are always listed, so
                           // they can be picked without opening their parent first.
                           const showNext = !!o.next;
@@ -1757,15 +1828,17 @@ export default function StatusMatcher() {
                   );
                 })()}
 
-                {focusField && focusField.field_type === "preset" && focusField.phrases?.length > 0 && (() => {
-                  const presetOptions = focusField.field_key === "uketori" ? UKETORI_OPTIONS : focusField.phrases;
+                {focusField && focusField.field_type === "preset" && (() => {
+                  const presetOptions = focusField.field_key === "uketori" ? uketoriOptions(focusField) : (focusField.phrases ?? []);
+                  if (!presetOptions.length) return null;
                   return (
                   <div key={`preset-${focusField.field_key}`} className="card border-0 shadow-sm rounded-4 mt-1">
                     <div className="card-body">
                       <h6 className={`card-title d-flex align-items-center mb-1 ${styles.choiceTitle}`}>
                         <span className="badge bg-primary me-2 rounded-pill">🎯</span>
-                        {CHOICE_HEADINGS[focusField.field_key] ??
-                          `${focusField.field_label} の候補（クリックで選択、${presetOptions.length}件）`}
+                        {focusField.field_key === "uketori"
+                          ? uketoriTitle
+                          : `${focusField.field_label} の候補（クリックで選択、${presetOptions.length}件）`}
                       </h6>
                       <div className="list-group list-group-flush">
                         {presetOptions.map((p) => {
