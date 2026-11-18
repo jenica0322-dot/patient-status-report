@@ -24,6 +24,8 @@ export const metadata: Metadata = {
   icons: [
     { rel: "icon", url: "/favicon.ico" },
   ],
+  // Stops Chrome's page translation (see translate="no" on <html> below).
+  other: { google: "notranslate" },
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
@@ -41,7 +43,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="ja" suppressHydrationWarning>
+    // translate="no": browser auto-translation (Safari / Chrome) swaps React's
+    // text nodes for its own, and the next re-render then crashes with
+    // "NotFoundError: removeChild … The object can not be found here".
+    <html lang="ja" translate="no" className="notranslate" suppressHydrationWarning>
       <body className={`${geistSans.variable} ${geistMono.variable}`}>
         <AuthProvider>
           <PatientProvider>{children}</PatientProvider>

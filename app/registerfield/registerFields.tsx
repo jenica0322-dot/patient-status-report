@@ -3,6 +3,8 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import ReportLayoutSettings from "./ReportLayoutSettings";
+import GroupFieldEditor from "./GroupFieldEditor";
+import UketoriEditor from "./UketoriEditor";
 import {
   Container,
   Row,
@@ -30,6 +32,43 @@ import {
   saveStatusField,
   deleteStatusField,
 } from "@/app/lib/statusApi";
+import {
+  TARGET_GROUP_DEFS,
+  TARGET_GROUP_SCREEN_KEY,
+  UKETORI_FIELD_KEY,
+  storedGroupLabel,
+  storedGroupOptions,
+  uketoriLabel,
+  uketoriOptions,
+} from "@/app/lib/targetFields";
+
+// 日次記録 main categories shown in the 登録済みフィールド list: うけとり (its
+// own master row, options editable) and 食べ残し / 体調 (each option saves
+// into a report column). All three are editable. The other daily
+// status_fields rows stay in the DB as report columns but aren't listed.
+type MasterEntry =
+  | { kind: "field"; field: Field; order: number }
+  | { kind: "group"; field_key: string; field_label: string; options: string[]; multiple?: boolean; order: number };
+
+function buildDailyEntries(fields: Field[], groupRows: Field[]): MasterEntry[] {
+  const entries: MasterEntry[] = [];
+  const uketori = fields.find((f) => f.field_key === UKETORI_FIELD_KEY);
+  if (uketori) entries.push({ kind: "field", field: uketori, order: uketori.order_index });
+  for (const def of TARGET_GROUP_DEFS) {
+    const anchor = fields.find((f) => f.field_key === def.anchorKey);
+    entries.push({
+      kind: "group",
+      field_key: def.field_key,
+      field_label: storedGroupLabel(def.field_key, groupRows),
+      options: storedGroupOptions(def.field_key, groupRows).flatMap((o) =>
+        o.sub?.length ? o.sub.map((x) => `${o.label}：${x}`) : [o.label]
+      ),
+      multiple: def.multiple,
+      order: anchor?.order_index ?? Number.MAX_SAFE_INTEGER,
+    });
+  }
+  return entries.sort((a, b) => a.order - b.order);
+}
 
 interface Field {
   screen_key: string;
@@ -40,9 +79,10 @@ interface Field {
   order_index: number;
 }
 
+// 月次報告 is no longer edited here (its tab was removed, same as on Status
+// Input). Its master rows stay in the DB — the 報告書 still uses them.
 const SCREENS = [
   { key: "daily_status", label: "日次記録" },
-  { key: "monthly_report", label: "月次報告" },
 ];
 
 // Third tab next to the screens: the 報告書's comment-block / footer layout.
@@ -62,6 +102,19 @@ export default function RegisterFields() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [layoutTab, setLayoutTab] = useState(false);
+  const [groupRows, setGroupRows] = useState<Field[]>([]);
+  // 食べ残し / 体調 being edited (its field_key), or null for the normal form.
+  // うけとり / 食べ残し / 体調 being edited (its field_key), or null for the
+  // normal form.
+  const [editingGroup, setEditingGroup] = useState<string | null>(null);
+  const editingLabel = editingGroup
+    ? editingGroup === UKETORI_FIELD_KEY
+      ? uketoriLabel(groupRows)
+      : storedGroupLabel(editingGroup, groupRows)
+    : "";
+  const uketoriField = fields.find((f) => f.field_key === UKETORI_FIELD_KEY);
+  const isDaily = form.screen_key === "daily_status";
+  const dailyEntries = isDaily ? buildDailyEntries(fields, groupRows) : [];
   const layoutDirtyRef = useRef(false);
   // Leaving the 報告書レイアウト tab with unsaved edits asks first.
   const leaveLayoutTab = () => {
@@ -80,6 +133,9 @@ export default function RegisterFields() {
       setLoading(true);
       const data = await fetchStatusFields(form.screen_key);
       setFields(data);
+      if (form.screen_key === "daily_status") {
+        setGroupRows(await fetchStatusFields(TARGET_GROUP_SCREEN_KEY).catch(() => []));
+      }
     } catch (err) {
       console.error("Failed to load fields:", err);
       setMessage({ type: "error", text: "Failed to load fields" });
@@ -89,6 +145,7 @@ export default function RegisterFields() {
   };
 
   const handleScreenChange = (screenKey: string) => {
+    setEditingGroup(null);
     setForm({
       screen_key: screenKey,
       field_key: "",
@@ -227,8 +284,35 @@ export default function RegisterFields() {
                     <Card.Header style={{ fontSize: 18 }}>
                       <Database className="me-2" />
                       フィールド情報
+                      {editingGroup && <span key="editing-group">（{editingLabel}）</span>}
                     </Card.Header>
                     <Card.Body>
+                      {editingGroup === UKETORI_FIELD_KEY && uketoriField ? (
+                        <UketoriEditor
+                          key={editingGroup}
+                          field={uketoriField}
+                          groupRows={groupRows}
+                          onCancel={() => setEditingGroup(null)}
+                          onSaved={async () => {
+                            setEditingGroup(null);
+                            setMessage({ type: "success", text: "Field saved successfully!" });
+                            await loadFields();
+                          }}
+                        />
+                      ) : editingGroup ? (
+                        <GroupFieldEditor
+                          key={editingGroup}
+                          fieldKey={editingGroup}
+                          groupRows={groupRows}
+                          dailyFields={fields}
+                          onCancel={() => setEditingGroup(null)}
+                          onSaved={async () => {
+                            setEditingGroup(null);
+                            setMessage({ type: "success", text: "Field saved successfully!" });
+                            await loadFields();
+                          }}
+                        />
+                      ) : (
                       <Form>
                         <Row className="mb-3">
                           <Col md={6}>
@@ -352,6 +436,7 @@ export default function RegisterFields() {
                           </Button>
                         </div>
                       </Form>
+                      )}
                     </Card.Body>
                   </Card>
                 </Col>
@@ -360,12 +445,54 @@ export default function RegisterFields() {
                   <Card>
                     <Card.Header style={{ fontSize: 18 }}>
                       <List className="me-2" />
-                      登録済みフィールド ({fields.length})
+                      登録済みフィールド ({isDaily ? dailyEntries.length : fields.length})
                     </Card.Header>
                     <Card.Body className="p-0">
                       {loading ? (
                         <div className="text-center py-4">
                           <Spinner animation="border" />
+                        </div>
+                      ) : isDaily ? (
+                        <div className="list-group list-group-flush scroll-panel">
+                          {dailyEntries.map((e) => {
+                            const key = e.kind === "field" ? e.field.field_key : e.field_key;
+                            const label = e.kind === "field" ? uketoriLabel(groupRows) : e.field_label;
+                            const options = e.kind === "field" ? uketoriOptions(e.field) : e.options;
+                            return (
+                              <div key={key} className="list-group-item">
+                                <div className="d-flex justify-content-between align-items-start">
+                                  <div className="flex-grow-1 me-2" style={{ minWidth: 0 }}>
+                                    <h6 className="mb-1">{label}</h6>
+                                    <div className="d-flex flex-wrap gap-1 mb-1">
+                                      {options.map((o) => (
+                                        <Badge key={o} bg="light" text="dark" className="border fw-normal">
+                                          {o}
+                                        </Badge>
+                                      ))}
+                                    </div>
+                                    <small className="text-muted">
+                                      {e.kind === "field"
+                                        ? `単一選択 • ${options.length}選択肢`
+                                        : `${e.multiple ? "複数選択可" : "単一選択"} • ${options.length}選択肢`}
+                                    </small>
+                                  </div>
+                                  <div className="flex-shrink-0 d-flex">
+                                    <Button
+                                      variant="outline-primary"
+                                      size="sm"
+                                      onClick={() => {
+                                        setMessage(null);
+                                        setEditingGroup(e.kind === "field" ? e.field.field_key : e.field_key);
+                                      }}
+                                      aria-label={`${label}を編集`}
+                                    >
+                                      <Pencil />
+                                    </Button>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
                         </div>
                       ) : fields.length === 0 ? (
                         <div className="text-center py-4 text-muted">
