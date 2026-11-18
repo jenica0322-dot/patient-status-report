@@ -28,6 +28,7 @@ import {
   TARGET_GROUP_SCREEN_KEY,
   UKETORI_DEFAULT_LABEL,
   buildGroupTargetFields,
+  choiceSpellings,
   groupAllOptions,
   setGroupTargetFields,
   uketoriLabel,
@@ -237,44 +238,54 @@ const NEXT_FIELD_COMMAND = /^(次|つぎ|次へ|つぎへ|以上|いじょう|ne
 // Every choice a picker-only Target Field shows, including follow-up choices
 // (体調他 → 風邪), so a spoken answer can be matched against any of them.
 
-// Matches a spoken answer to one of the choices shown for the active Target
-// Field — exact (normalized) first, otherwise the closest choice that's still
-// clearly similar. Returns null when nothing is close enough.
-function matchChoice(utterance: string, choices: string[]): string | null {
-  const cleaned = normalizeJa(utterance);
-  if (!cleaned) return null;
-  let best: { choice: string; score: number } | null = null;
-  for (const choice of choices) {
-    const cleanedChoice = normalizeJa(choice);
-    if (!cleanedChoice) continue;
-    if (cleaned === cleanedChoice) return choice;
-    const dist = levenshteinDistance(cleaned, cleanedChoice);
-    const maxLen = Math.max(cleaned.length, cleanedChoice.length);
-    const sim = ((maxLen - dist) / maxLen) * 100;
-    if (!best || sim > best.score) best = { choice, score: sim };
-  }
-  return best && best.score >= 60 ? best.choice : null;
-}
-
-// For a multiple-choice picker (体調): every choice named in one utterance,
-// in the order spoken — "食欲低下とふらつき" → [食欲低下, ふらつき]. Labels are
-// found as substrings first (punctuation/・ dropped, katakana folded to
-// hiragana); failing that, each part split on と/や/、 etc. is fuzzy-matched.
+// Spoken text / labels compared for choice matching: punctuation and ・
+// dropped, katakana folded to hiragana (フラツキ → ふらつき).
 const foldChoiceText = (t: string) =>
   normalizeJa(t)
     .replace(/[.・･\/／!！?？「」]/g, "")
     .replace(/[ァ-ヶ]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0x60));
 
+// Matches a spoken answer to one of the choices shown for the active Target
+// Field — exact (normalized) first, otherwise the closest choice that's still
+// clearly similar. Returns null when nothing is close enough.
+// Each choice is also tried under its other spellings (kana reading, common
+// mis-hearings — see CHOICE_READINGS), so 「かぜ」 picks 風邪.
+function matchChoice(utterance: string, choices: string[]): string | null {
+  const cleaned = foldChoiceText(utterance);
+  if (!cleaned) return null;
+  let best: { choice: string; score: number } | null = null;
+  for (const choice of choices) {
+    for (const spelling of choiceSpellings(choice)) {
+      const cleanedChoice = foldChoiceText(spelling);
+      if (!cleanedChoice) continue;
+      if (cleaned === cleanedChoice) return choice;
+      const dist = levenshteinDistance(cleaned, cleanedChoice);
+      const maxLen = Math.max(cleaned.length, cleanedChoice.length);
+      const sim = ((maxLen - dist) / maxLen) * 100;
+      if (!best || sim > best.score) best = { choice, score: sim };
+    }
+  }
+  return best && best.score >= 60 ? best.choice : null;
+}
+
+// For a multiple-choice picker (体調): every choice named in one utterance,
+// in the order spoken — "食欲低下とふらつき" → [食欲低下, ふらつき]. Labels (and
+// their other spellings, e.g. かぜ for 風邪) are found as substrings first;
+// parts split on と/や/、 etc. that hold none are fuzzy-matched on their own.
 function matchChoicesMulti(utterance: string, choices: string[]): string[] {
   const u = foldChoiceText(utterance);
   if (!u) return [];
   const found = choices
-    .map((choice) => ({ choice, k: foldChoiceText(choice) }))
+    .flatMap((choice) => choiceSpellings(choice).map((sp) => ({ choice, k: foldChoiceText(sp) })))
     .filter(({ k }) => k && u.includes(k))
     .map(({ choice, k }) => ({ choice, k, idx: u.indexOf(k) }));
-  // Drop a label that only matched inside a longer matched one.
-  const kept = found.filter((a) => !found.some((b) => b !== a && b.k.length > a.k.length && b.k.includes(a.k)));
-  const out = kept.sort((a, b) => a.idx - b.idx).map((f) => f.choice);
+  // Drop a match that only sits inside a longer match of another choice
+  // (e.g. 「体調」 inside 「体調他」).
+  const kept = found.filter(
+    (a) => !found.some((b) => b.choice !== a.choice && b.k.length > a.k.length && b.k.includes(a.k))
+  );
+  const out: string[] = [];
+  for (const f of kept.sort((a, b) => a.idx - b.idx)) if (!out.includes(f.choice)) out.push(f.choice);
   // Parts that didn't contain an exact label (a misheard word, e.g. 食欲低か)
   // are fuzzy-matched on their own.
   const parts = utterance.split(/[、,，・\s]+|それと|そして|あと|と|や/).filter((x) => x.trim().length >= 2);

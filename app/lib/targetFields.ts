@@ -143,6 +143,31 @@ export function setGroupTargetFields(groups: GroupTargetField[]) {
   GROUP_TARGET_FIELDS = groups;
 }
 
+// Other ways the speech recognizer writes a choice — kana readings and common
+// mis-hearings — so e.g. saying 「かぜ」 (often transcribed かぜ / カゼ / 風)
+// still picks 風邪. Keyed by the option's label; katakana is folded to
+// hiragana before matching, so only hiragana forms are needed here.
+export const CHOICE_READINGS: Record<string, string[]> = {
+  // うけとり
+  玄関: ["げんかん"],
+  家族: ["かぞく"],
+  不在: ["ふざい"],
+  // 食べ残し
+  半分: ["はんぶん"],
+  問題なし: ["もんだいなし", "問題無し"],
+  // 体調
+  食欲低下: ["しょくよくていか", "食欲"],
+  "顔色・元気": ["かおいろげんき", "顔色", "元気"],
+  ふらつき: ["ふらふら"],
+  体調他: ["たいちょうた", "体調その他"],
+  風邪: ["かぜ", "風"],
+};
+
+// The label plus its alternative spellings, for voice matching.
+export function choiceSpellings(label: string): string[] {
+  return [label, ...(CHOICE_READINGS[label] ?? [])];
+}
+
 export function groupAllOptions(options: GroupOption[]): GroupOption[] {
   return options.flatMap((o) => (o.next ? [o, ...groupAllOptions(o.next)] : [o]));
 }
