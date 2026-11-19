@@ -252,26 +252,7 @@ button.toolbarBtn > svg {
   pointer-events: none;
 }
 
-/* Uploaded by 保存 — stays in place (no layout shift), marked 保存済み. */
-.photoThumbSaved {
-  cursor: default;
-}
-
-.photoThumbSavedBadge {
-  background: rgba(100, 116, 139, 0.85);
-}
-
-/* 保存 button: 「保存」 and 「保存中…」 overlap in one cell (fixed width), and
-   the spinner is the same size as the save icon. */
-.saveLabel {
-  display: inline-grid;
-}
-
-.saveLabel > span {
-  grid-area: 1 / 1;
-  text-align: center;
-}
-
+/* 保存 button: while saving, the spinner takes the save icon's exact size. */
 .saveSpinner {
   width: 1em;
   height: 1em;
@@ -434,8 +415,8 @@ button.toolbarBtn > svg {
 }
 
 .choiceLabel {
-  /* A little over half the row height, 18–24px. */
-  font-size: clamp(18px, calc(var(--row-h, 52px) * 0.55), 24px);
+  /* About 70% of the row height, 22–30px — big and easy to read. */
+  font-size: clamp(22px, calc(var(--row-h, 52px) * 0.7), 30px);
   font-weight: 400;
   line-height: 1.2;
 }
@@ -859,6 +840,23 @@ button.toolbarBtn > svg {
     min-height: 44px;
     padding-left: 0.85rem;
     padding-right: 0.85rem;
+  }
+
+  /* 写真追加 / QR読取 / 保存 sit on one straight line: slimmer side padding
+     and gaps so all three fit a phone's width (保存 overrides Bootstrap's
+     px-4, which is !important). */
+  .scopeBarControls {
+    column-gap: 0.35rem;
+  }
+
+  button.photoUploadBtn.toolbarBtn.toolbarBtn {
+    padding-left: 0.6rem !important;
+    padding-right: 0.6rem !important;
+    gap: 0.35rem;
+  }
+
+  button.primaryBtn.toolbarBtn.toolbarBtn {
+    letter-spacing: 0;
   }
 
   .targetBox :global(.card-body) {
