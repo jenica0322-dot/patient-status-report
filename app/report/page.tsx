@@ -23,6 +23,7 @@ import {
 } from "../lib/statusApi";
 import PhotoLightbox from "../components/dashboard/PhotoLightbox";
 import { markVoiceFlowResume } from "../lib/voiceFlowResume";
+import { allCategoryConfigs, TARGET_GROUP_SCREEN_KEY } from "../lib/targetFields";
 import galleryStyles from "../styles/PhotoGallery.module.css";
 import {
   ReportField,
@@ -57,16 +58,6 @@ const PATIENT_SELECT_FIELD_LABEL = "利用者選択";
 // Handled from click timing (not onDoubleClick) so a double-tap on a phone
 // works the same as a mouse double-click.
 const DOUBLE_TAP_MS = 400;
-
-// Checking one 食事 box in the report clears the ones it can't coexist with —
-// the same choices the Status Input 食べ残し picker allows. 問題なし is a
-// completed meal, so it goes together with 完食.
-const MEAL_CLEARS: Record<string, string[]> = {
-  kanshoku: ["hanbun", "nokoshi"],
-  hanbun: ["kanshoku", "nokoshi", "mondai_nashi"],
-  nokoshi: ["kanshoku", "hanbun", "mondai_nashi"],
-  mondai_nashi: ["hanbun", "nokoshi"],
-};
 
 // A stored field value as a { value, comment } object (older rows may hold a
 // bare value).
@@ -196,6 +187,9 @@ export default function ReportPage() {
 
   const [dailyFields, setDailyFields] = useState<ReportField[]>([]);
   const [monthlyFields, setMonthlyFields] = useState<ReportField[]>([]);
+  // マスター's 日次記録 categories (daily_target rows): their 選択方法
+  // (単一選択 / 複数選択) decides how ✓ cells toggle in the grid.
+  const [targetRows, setTargetRows] = useState<any[]>([]);
   const [report, setReport] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -240,6 +234,7 @@ export default function ReportPage() {
   useEffect(() => {
     fetchStatusFields("daily_status").then(setDailyFields).catch(() => {});
     fetchStatusFields("monthly_report").then(setMonthlyFields).catch(() => {});
+    fetchStatusFields(TARGET_GROUP_SCREEN_KEY).then(setTargetRows).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -374,6 +369,8 @@ export default function ReportPage() {
             f.field_key !== "uketori" &&
             // メモ isn't shown in the report grid (its data stays in the record).
             f.field_key !== "memo" &&
+            // Answer columns of categories added in マスター (e.g. 特記) stay off the report.
+            f.field_type !== "preset" &&
             f.field_label !== PATIENT_SELECT_FIELD_LABEL
         )
         .sort((a, b) => a.order_index - b.order_index),
@@ -383,18 +380,23 @@ export default function ReportPage() {
   // field it was typed for — group pickers (食べ残し/体調) keep theirs on their
   // anchor field — so each column reads that key's comment. うけとり's sits right
   // after the うけとり column; the group ones after the group's last column.
+  // Every マスター category with コメント入力 on gets one, after its last shown
+  // column (same rule as the Excel/PDF: server/lib/reportPlan.js).
   const groupCommentAfter = useMemo(() => {
-    const groups = [
-      { group: "食事", commentKey: "kanshoku", label: "食べ残しコメント" },
-      { group: "体調", commentKey: "shokuyoku_teika", label: "体調コメント" },
-    ];
     const m = new Map<string, { commentKey: string; label: string; group: string }>();
-    groups.forEach((g) => {
-      const last = [...orderedDailyBody].reverse().find((f) => FIELD_GROUP[f.field_key] === g.group);
-      if (last) m.set(last.field_key, g);
-    });
+    if (!dailyFields.length) return m;
+    const pos = new Map(orderedDailyBody.map((f, i) => [f.field_key, i]));
+    for (const c of allCategoryConfigs(dailyFields as any, targetRows)) {
+      if (!c.comment || !c.commentKey || !dfByKey[c.commentKey]) continue;
+      const keys = c.display === "text" ? [c.column] : c.options.map((o) => o.key);
+      const shown = keys.filter((k): k is string => !!k && pos.has(k));
+      if (!shown.length) continue;
+      const last = shown.reduce((a, b) => (pos.get(b)! > pos.get(a)! ? b : a));
+      if (m.has(last)) continue;
+      m.set(last, { commentKey: c.commentKey, label: `${c.spokenLabel}コメント`, group: FIELD_GROUP[last] });
+    }
     return m;
-  }, [orderedDailyBody]);
+  }, [orderedDailyBody, dailyFields, targetRows, dfByKey]);
   const commentColCount = 1 + groupCommentAfter.size;
 
   // 報告書コメント欄 blocks and the footer follow the マスター設定 layout, which
@@ -512,17 +514,32 @@ export default function ReportPage() {
     saveDayValues(edit.date, (v) => ({ ...v, [edit.key]: { ...asFieldObj(v[edit.key]), [edit.part]: stored } }));
   };
 
+  // For each ✓ column in a 単一選択 category (as set in マスター): the category's
+  // other ✓ columns, which get cleared when it's checked. Columns in a
+  // 複数選択 category (or in no category) aren't listed and toggle on their own.
+  const singleSelectSiblings = useMemo(() => {
+    const m = new Map<string, string[]>();
+    if (!dailyFields.length) return m;
+    const isCheckCol = (k: string) => dfByKey[k]?.field_type === "checkbox";
+    for (const c of allCategoryConfigs(dailyFields as any, targetRows)) {
+      if (c.display !== "checkbox" || c.multiple) continue;
+      const keys = [...new Set(c.options.map((o) => o.key).filter((k): k is string => !!k && isCheckCol(k)))];
+      for (const k of keys) m.set(k, keys.filter((x) => x !== k));
+    }
+    return m;
+  }, [dailyFields, targetRows, dfByKey]);
+
+  // Double-click on a ✓ cell: toggles it. Checking a column of a 単一選択
+  // category clears the category's other ✓ so only one stays; 複数選択 leaves
+  // the others as they are.
   const toggleCheckCell = (iso: string, key: string) =>
     saveDayValues(iso, (v) => {
       const on = !isChecked(v[key]);
       const next = { ...v, [key]: { ...asFieldObj(v[key]), value: on } };
       if (on) {
-        for (const k of MEAL_CLEARS[key] || []) {
+        for (const k of singleSelectSiblings.get(key) || []) {
           if (isChecked(next[k])) next[k] = { ...asFieldObj(next[k]), value: false };
         }
-        if (key === "mondai_nashi") next.kanshoku = { ...asFieldObj(next.kanshoku), value: true };
-      } else if (key === "kanshoku" && isChecked(next.mondai_nashi)) {
-        next.mondai_nashi = { ...asFieldObj(next.mondai_nashi), value: false };
       }
       return next;
     });

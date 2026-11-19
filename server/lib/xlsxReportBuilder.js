@@ -47,10 +47,8 @@ function styleCell(cell, { bold, size, color, fill, align, valign, wrap, border 
 // Daily grid comment columns sit right after the column they belong to, as in the
 // on-screen report: うけとり's after うけとり, and the 食べ残し/体調 group comments
 // (stored on the group's anchor field) after the group's last column.
-const GROUP_COMMENT_COLUMNS = [
-  { group: "食事", commentKey: "kanshoku", label: "食べ残しコメント" },
-  { group: "体調", commentKey: "shokuyoku_teika", label: "体調コメント" },
-];
+// (Category comment columns follow マスター — see categoryCommentColumns.)
+const { categoryCommentColumns } = require("./reportPlan");
 
 // Rough one-line width of `text` in ems: full-width (CJK) characters ~1em,
 // ASCII/half-width ones ~0.55em.
@@ -67,7 +65,7 @@ const MIN_COL_WIDTH = { day: 4.8, delivery: 10, uketori: 7, text: 9, comment: 13
 const HEADER_FONT_SIZE = 9;
 
 // Builds the daily grid's column list (header label + kind per column).
-function buildDailyColumns(dfByKey, orderedDailyBody) {
+function buildDailyColumns(dfByKey, orderedDailyBody, dailyFields, targetRows) {
   const uketoriLabel = dfByKey.uketori?.field_label || "受取";
   const cols = [
     { label: "日", kind: "day" },
@@ -77,14 +75,11 @@ function buildDailyColumns(dfByKey, orderedDailyBody) {
     { label: uketoriLabel, kind: "uketori" },
     { label: `${uketoriLabel}コメント`, kind: "comment", commentKey: "uketori", fill: GRAY },
   ];
-  const lastOfGroup = new Map();
-  orderedDailyBody.forEach((f) => {
-    if (FIELD_GROUP[f.field_key]) lastOfGroup.set(FIELD_GROUP[f.field_key], f.field_key);
-  });
+  const commentAfter = categoryCommentColumns(dailyFields, targetRows || [], orderedDailyBody);
   orderedDailyBody.forEach((f) => {
     cols.push({ label: f.field_label, kind: f.field_type === "checkbox" ? "checkbox" : "text", field: f });
-    const gc = GROUP_COMMENT_COLUMNS.find((g) => lastOfGroup.get(g.group) === f.field_key);
-    if (gc) cols.push({ label: gc.label, kind: "comment", commentKey: gc.commentKey, fill: GROUP_COLOR[gc.group] });
+    const gc = commentAfter.get(f.field_key);
+    if (gc) cols.push({ label: gc.label, kind: "comment", commentKey: gc.commentKey, fill: GROUP_COLOR[gc.group] || WHITE });
   });
   return cols;
 }
@@ -108,7 +103,7 @@ function mergeAndStyle(ws, r1, c1, r2, c2, value, opts) {
   return cell;
 }
 
-async function buildReportWorkbook({ data, dailyFields, monthlyFields, layout }) {
+async function buildReportWorkbook({ data, dailyFields, monthlyFields, layout, targetRows }) {
   const reportLayout = layout || defaultLayout(monthlyFields);
   const workbook = new ExcelJS.Workbook();
   workbook.creator = "patient-status-report";
@@ -136,6 +131,8 @@ async function buildReportWorkbook({ data, dailyFields, monthlyFields, layout })
         f.field_key !== "uketori" &&
         // メモ isn't shown in the report grid (its data stays in the record).
         f.field_key !== "memo" &&
+        // Answer columns of categories added in マスター (e.g. 特記) stay off the report.
+        f.field_type !== "preset" &&
         f.field_label !== PATIENT_SELECT_FIELD_LABEL
     )
     .sort((a, b) => a.order_index - b.order_index);
@@ -144,7 +141,7 @@ async function buildReportWorkbook({ data, dailyFields, monthlyFields, layout })
   // is sized so its header fits on one line; the header block and daily grid are
   // single-line (no wrapping) throughout. The monthly section below reuses the
   // same columns and spans the full width.
-  const columns = buildDailyColumns(dfByKey, orderedDailyBody);
+  const columns = buildDailyColumns(dfByKey, orderedDailyBody, dailyFields, targetRows);
   const COLS = columns.length;
   columns.forEach((c, idx) => {
     ws.getColumn(idx + 1).width = columnWidth(c);
