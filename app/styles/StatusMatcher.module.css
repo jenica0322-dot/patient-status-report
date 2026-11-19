@@ -252,6 +252,33 @@ button.toolbarBtn > svg {
   pointer-events: none;
 }
 
+/* Uploaded by 保存 — stays in place (no layout shift), marked 保存済み. */
+.photoThumbSaved {
+  cursor: default;
+}
+
+.photoThumbSavedBadge {
+  background: rgba(100, 116, 139, 0.85);
+}
+
+/* 保存 button: 「保存」 and 「保存中…」 overlap in one cell (fixed width), and
+   the spinner is the same size as the save icon. */
+.saveLabel {
+  display: inline-grid;
+}
+
+.saveLabel > span {
+  grid-area: 1 / 1;
+  text-align: center;
+}
+
+.saveSpinner {
+  width: 1em;
+  height: 1em;
+  border-width: 0.15em;
+  flex-shrink: 0;
+}
+
 .photoThumbDelete {
   position: absolute;
   top: 2px;

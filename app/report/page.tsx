@@ -59,6 +59,18 @@ const PATIENT_SELECT_FIELD_LABEL = "利用者選択";
 // works the same as a mouse double-click.
 const DOUBLE_TAP_MS = 400;
 
+// A comment column header: 「〈名前〉」 on the first line, 「コメント」 below it.
+function commentHead(label: string) {
+  const name = label.replace(/コメント$/, "");
+  return name === label ? label : (
+    <>
+      {name}
+      <br />
+      コメント
+    </>
+  );
+}
+
 // A stored field value as a { value, comment } object (older rows may hold a
 // bare value).
 function asFieldObj(v: any): { value?: any; comment?: string } {
@@ -735,7 +747,7 @@ export default function ReportPage() {
 
   return (
     <Layout>
-      <Container fluid className="py-2">
+      <Container fluid className={`py-2 ${styles.reportPage}`}>
         <div className="d-flex align-items-center mb-3">
           <div
             className="d-flex align-items-center justify-content-center me-3 flex-shrink-0"
@@ -937,13 +949,13 @@ export default function ReportPage() {
                     <th style={{ width: 72 }}>配食者名</th>
                     <th style={{ width: 72 }}>利用者確認印</th>
                     <th style={{ width: 64 }}>{dfByKey.uketori?.field_label || "受取"}</th>
-                    <th className={styles.colCommentHead}>{dfByKey.uketori?.field_label || "受取"}コメント</th>
+                    <th className={styles.colCommentHead}>{commentHead(`${dfByKey.uketori?.field_label || "受取"}コメント`)}</th>
                     {orderedDailyBody.map((f) => {
                       const after = groupCommentAfter.get(f.field_key);
                       return (
                         <Fragment key={f.field_key}>
                           <th>{f.field_label}</th>
-                          {after && <th className={styles.colCommentHead}>{after.label}</th>}
+                          {after && <th className={styles.colCommentHead}>{commentHead(after.label)}</th>}
                         </Fragment>
                       );
                     })}
