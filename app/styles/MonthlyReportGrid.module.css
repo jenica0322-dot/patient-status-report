@@ -151,6 +151,7 @@
   color: #1f2d4a;
 }
 
+/* Phones / tablets: the grid keeps its natural width and scrolls sideways. */
 .gridScroll {
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
@@ -169,27 +170,35 @@
   }
 }
 
-/* Laptop/desktop only: the grid spans the available width, and every header,
-   label, option and value stays on one straight line. Columns size to their
-   one-line text (auto layout) and share any leftover width. Daily comment
-   cells are capped and cut off with "…" (full text on hover) so a long
-   comment can't stretch the grid. The free-text 月次 blocks (monthly comment
-   blocks, 総評) keep their own line breaks. Smaller screens keep the
-   scrollable layout above unchanged. */
+/* PC (laptop/desktop): the report never scrolls sideways — the grid always
+   fits the card's width. Columns size to their text (auto layout) and share
+   the width; when there isn't room for every header / value on one line, text
+   wraps inside its column instead of pushing the table wider. Daily comment
+   cells are cut off with "…" (full text on hover), so a long comment can't
+   stretch the grid. The free-text 月次 blocks (monthly comment blocks, 総評)
+   keep their own line breaks. */
 @media (min-width: 992px) {
+  .gridScroll {
+    max-width: 100%;
+    overflow-x: visible;
+  }
+
   .grid {
     width: 100%;
     min-width: 0;
     table-layout: auto;
-    font-size: clamp(0.62rem, 0.72vw, 0.78rem);
+    font-size: clamp(0.55rem, 0.72vw, 0.78rem);
     line-height: 1.3;
   }
 
   .grid th,
-  .grid td {
+  .grid td,
+  .grid .labelCell,
+  .grid .headerRow th,
+  .grid .checklistOption {
+    white-space: normal;
+    overflow-wrap: anywhere;
     padding: 3px 4px;
-    white-space: nowrap;
-    overflow-wrap: normal;
   }
 
   .grid td.commentCell {
@@ -202,12 +211,18 @@
     max-width: none;
   }
 
+  /* width: 0 keeps the comment text from widening its column; min-width fills it. */
   .commentText {
     display: block;
-    max-width: 10em;
+    width: 0;
+    min-width: 100%;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .grid .cellInput {
+    min-width: 0;
   }
 
   .sectionBar {

@@ -97,10 +97,8 @@ const MONTHLY_COL_WIDTHS = new Array(TOTAL_COLS).fill(
 // Daily grid (page 1). Comment columns sit right after the column they belong
 // to, as in the on-screen report: うけとり's after うけとり, and the 食べ残し/体調
 // group comments (stored on the group's anchor field) after the group's last column.
-const GROUP_COMMENT_COLUMNS = [
-  { group: "食事", commentKey: "kanshoku", label: "食べ残しコメント" },
-  { group: "体調", commentKey: "shokuyoku_teika", label: "体調コメント" },
-];
+// (Category comment columns follow マスター — see categoryCommentColumns.)
+const { categoryCommentColumns } = require("./reportPlan");
 const DAILY_HEADER_FONT_SIZE = 7.5;
 const DAY_ROW_FONT_SIZE = 7.5;
 // Minimum content widths, in ems of the row font, for columns whose values can be
@@ -118,7 +116,7 @@ function textEms(text) {
 }
 
 // Builds the daily grid's column list (header label + kind per column).
-function buildDailyColumns(dfByKey, orderedDailyBody) {
+function buildDailyColumns(dfByKey, orderedDailyBody, dailyFields, targetRows) {
   const uketoriLabel = dfByKey.uketori?.field_label || "受取";
   const cols = [
     { label: "日", kind: "day" },
@@ -128,14 +126,11 @@ function buildDailyColumns(dfByKey, orderedDailyBody) {
     { label: uketoriLabel, kind: "uketori" },
     { label: `${uketoriLabel}コメント`, kind: "comment", commentKey: "uketori", fill: COLORS.GRAY },
   ];
-  const lastOfGroup = new Map();
-  orderedDailyBody.forEach((f) => {
-    if (FIELD_GROUP[f.field_key]) lastOfGroup.set(FIELD_GROUP[f.field_key], f.field_key);
-  });
+  const commentAfter = categoryCommentColumns(dailyFields, targetRows || [], orderedDailyBody);
   orderedDailyBody.forEach((f) => {
     cols.push({ label: f.field_label, kind: f.field_type === "checkbox" ? "checkbox" : "text", field: f });
-    const gc = GROUP_COMMENT_COLUMNS.find((g) => lastOfGroup.get(g.group) === f.field_key);
-    if (gc) cols.push({ label: gc.label, kind: "comment", commentKey: gc.commentKey, fill: GROUP_COLOR[gc.group] });
+    const gc = commentAfter.get(f.field_key);
+    if (gc) cols.push({ label: gc.label, kind: "comment", commentKey: gc.commentKey, fill: GROUP_COLOR[gc.group] || COLORS.WHITE });
   });
   return cols;
 }
@@ -256,7 +251,7 @@ const TABLE_LAYOUT = {
 };
 
 // ---- Page 1: header block + daily grid ----
-function buildDailyGridTable({ data, dailyFields, monthlyFields }) {
+function buildDailyGridTable({ data, dailyFields, monthlyFields, targetRows }) {
   const dfByKey = Object.fromEntries(dailyFields.map((f) => [f.field_key, f]));
   const mfByKey = Object.fromEntries(monthlyFields.map((f) => [f.field_key, f]));
   const monthlyValues = data.monthlyReport || {};
@@ -267,11 +262,13 @@ function buildDailyGridTable({ data, dailyFields, monthlyFields }) {
         f.field_key !== "uketori" &&
         // メモ isn't shown in the report grid (its data stays in the record).
         f.field_key !== "memo" &&
+        // Answer columns of categories added in マスター (e.g. 特記) stay off the report.
+        f.field_type !== "preset" &&
         f.field_label !== PATIENT_SELECT_FIELD_LABEL
     )
     .sort((a, b) => a.order_index - b.order_index);
 
-  const columns = buildDailyColumns(dfByKey, orderedDailyBody);
+  const columns = buildDailyColumns(dfByKey, orderedDailyBody, dailyFields, targetRows);
   const DAILY_COLS = columns.length;
   const colWidths = computeDailyColWidths(columns);
   // Every cell on page 1 stays on one line (see the header comment).
@@ -499,22 +496,22 @@ function buildMonthlySectionTable({ data, dailyFields, monthlyFields, layout }) 
   };
 }
 
-function buildReportPdfDocDefinition({ data, dailyFields, monthlyFields, layout }) {
+function buildReportPdfDocDefinition({ data, dailyFields, monthlyFields, layout, targetRows }) {
   return {
     pageSize: "A4",
     pageOrientation: "landscape",
     pageMargins: [PAGE_MARGIN_H, PAGE_MARGIN_V, PAGE_MARGIN_H, PAGE_MARGIN_V],
     defaultStyle: { font: "NotoSansJP", fontSize: 8 },
     content: [
-      buildDailyGridTable({ data, dailyFields, monthlyFields }),
+      buildDailyGridTable({ data, dailyFields, monthlyFields, targetRows }),
       buildMonthlySectionTable({ data, dailyFields, monthlyFields, layout }),
     ],
   };
 }
 
-async function buildReportPdfBuffer({ data, dailyFields, monthlyFields, layout }) {
+async function buildReportPdfBuffer({ data, dailyFields, monthlyFields, layout, targetRows }) {
   const printer = new PdfPrinter(FONTS);
-  const docDefinition = buildReportPdfDocDefinition({ data, dailyFields, monthlyFields, layout });
+  const docDefinition = buildReportPdfDocDefinition({ data, dailyFields, monthlyFields, layout, targetRows });
   const doc = printer.createPdfKitDocument(docDefinition);
 
   return new Promise((resolve, reject) => {

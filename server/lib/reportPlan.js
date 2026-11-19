@@ -213,4 +213,27 @@ async function loadPlanFields(pool) {
   return { dailyFields: daily.rows.map(norm), targetRows: target.rows.map(norm) };
 }
 
-module.exports = { buildReportPlan, countTallies, loadPlanFields, readCategories };
+/**
+ * The daily grid's category comment columns, as configured in マスター: each
+ * category with コメント入力 on gets a "<名前>コメント" column right after its
+ * last shown column, reading the comment from the field Status Input stores it
+ * on (commentKey). `shownColumns` = the grid's data columns in order.
+ * Returns Map<last column key, { commentKey, label, group }>.
+ */
+function categoryCommentColumns(dailyFields, targetRows, shownColumns) {
+  const pos = new Map(shownColumns.map((f, i) => [f.field_key, i]));
+  const exists = new Set(dailyFields.map((f) => f.field_key));
+  const out = new Map();
+  for (const c of readCategories(dailyFields, targetRows)) {
+    if (!c.comment || !c.commentKey || !exists.has(c.commentKey)) continue;
+    const keys = c.display === "text" ? [c.column] : c.options.map((o) => o.key).filter(Boolean);
+    const shown = keys.filter((k) => pos.has(k));
+    if (!shown.length) continue;
+    const last = shown.reduce((a, b) => (pos.get(b) > pos.get(a) ? b : a));
+    if (out.has(last)) continue;
+    out.set(last, { commentKey: c.commentKey, label: `${c.spoken}コメント`, group: FIELD_GROUP[last] });
+  }
+  return out;
+}
+
+module.exports = { buildReportPlan, countTallies, loadPlanFields, readCategories, categoryCommentColumns };

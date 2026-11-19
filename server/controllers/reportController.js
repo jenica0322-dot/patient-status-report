@@ -1,5 +1,6 @@
 const { getPool } = require("../db/registry");
 const { loadReportLayout } = require("../lib/reportLayout");
+const { loadPlanFields } = require("../lib/reportPlan");
 
 const primary = () => getPool("primary");
 
@@ -178,8 +179,10 @@ async function loadExportData(patientId, yearMonth) {
   const dailyFields = dailyFieldsResult.rows.map((r) => ({ ...r, phrases: parsePhrases(r.phrases) }));
   const monthlyFields = monthlyFieldsResult.rows.map((r) => ({ ...r, phrases: parsePhrases(r.phrases) }));
   const { layout } = await loadReportLayout(primary(), monthlyFields);
+  // マスター's 日次記録 categories — they decide the コメント columns.
+  const { targetRows } = await loadPlanFields(primary());
 
-  return { data, dailyFields, monthlyFields, layout };
+  return { data, dailyFields, monthlyFields, layout, targetRows };
 }
 
 // GET /api/status-report/export?patient_id=&year_month=YYYY-MM
@@ -190,10 +193,10 @@ const exportPatientReportExcel = async (req, res) => {
     if (!patient_id || !year_month)
       return res.status(400).json({ error: "patient_id and year_month are required" });
 
-    const { data, dailyFields, monthlyFields, layout } = await loadExportData(patient_id, year_month);
+    const { data, dailyFields, monthlyFields, layout, targetRows } = await loadExportData(patient_id, year_month);
 
     const { buildReportWorkbook } = require("../lib/xlsxReportBuilder");
-    const workbook = await buildReportWorkbook({ data, dailyFields, monthlyFields, layout });
+    const workbook = await buildReportWorkbook({ data, dailyFields, monthlyFields, layout, targetRows });
 
     const fileName = `状況記録表兼報告書_${data.patient.name}_${year_month}.xlsx`;
     res.setHeader(
@@ -220,10 +223,10 @@ const exportPatientReportPdf = async (req, res) => {
     if (!patient_id || !year_month)
       return res.status(400).json({ error: "patient_id and year_month are required" });
 
-    const { data, dailyFields, monthlyFields, layout } = await loadExportData(patient_id, year_month);
+    const { data, dailyFields, monthlyFields, layout, targetRows } = await loadExportData(patient_id, year_month);
 
     const { buildReportPdfBuffer } = require("../lib/pdfReportBuilder");
-    const pdfBuffer = await buildReportPdfBuffer({ data, dailyFields, monthlyFields, layout });
+    const pdfBuffer = await buildReportPdfBuffer({ data, dailyFields, monthlyFields, layout, targetRows });
 
     const fileName = `状況記録表兼報告書_${data.patient.name}_${year_month}.pdf`;
     res.setHeader("Content-Type", "application/pdf");
