@@ -170,24 +170,30 @@
   }
 }
 
-/* PC (laptop/desktop): the report never scrolls sideways — the grid always
-   fits the card's width. Columns size to their text (auto layout) and share
-   the width; when there isn't room for every header / value on one line, text
-   wraps inside its column instead of pushing the table wider. Daily comment
-   cells are cut off with "…" (full text on hover), so a long comment can't
-   stretch the grid. The free-text 月次 blocks (monthly comment blocks, 総評)
-   keep their own line breaks. */
+/* PC (laptop/desktop): the report fits the screen width — no sideways
+   scrolling. Every header, label and value stays on one straight line; only
+   the コメント column headers take two lines (「〈名前〉」 / 「コメント」), which
+   keeps those columns narrow. Columns size to their text (auto layout) and
+   share any leftover width. Daily comment cells are cut off with "…" (full
+   text on hover), so a long comment can't stretch the grid. The free-text 月次
+   blocks (monthly comment blocks, 総評) keep their own line breaks. */
 @media (min-width: 992px) {
+  /* A little more width for the report: less padding around it. */
+  .reportPage {
+    margin-left: -0.75rem;
+    margin-right: -0.75rem;
+    width: auto;
+  }
+
   .gridScroll {
     max-width: 100%;
-    overflow-x: visible;
   }
 
   .grid {
     width: 100%;
     min-width: 0;
     table-layout: auto;
-    font-size: clamp(0.55rem, 0.72vw, 0.78rem);
+    font-size: clamp(0.6rem, 0.72vw, 0.78rem);
     line-height: 1.3;
   }
 
@@ -196,9 +202,13 @@
   .grid .labelCell,
   .grid .headerRow th,
   .grid .checklistOption {
-    white-space: normal;
-    overflow-wrap: anywhere;
+    white-space: nowrap;
+    overflow-wrap: normal;
     padding: 3px 4px;
+  }
+
+  .grid .headerRow th.colCommentHead {
+    line-height: 1.2;
   }
 
   .grid td.commentCell {
@@ -240,7 +250,7 @@
 
   /* Tighter side padding on the report card, so the grid gets more width. */
   .reportBody {
-    padding: 0.5rem;
+    padding: 0.35rem;
   }
 }
 
