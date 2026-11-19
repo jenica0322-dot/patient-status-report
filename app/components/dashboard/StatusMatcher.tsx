@@ -762,7 +762,12 @@ export default function StatusMatcher() {
   // Where the comment box reads/writes for the focused Target Field. Picker-only
   // fields (食べ残し / 体調) have no column of their own, so their comment goes
   // on the report column they sit in front of.
-  const commentKey = focusGroupField ? focusGroupField.anchorKey : focusField?.field_key;
+  // (A category with コメント入力 off in マスター shows no comment box.)
+  const commentKey = focusGroupField
+    ? focusGroupField.comment === false
+      ? undefined
+      : focusGroupField.anchorKey
+    : focusField?.field_key;
   // 保存 is only shown once every Target Field has an answer (skipped ones
   // don't count). A `multiple` picker (体調) may legitimately be left empty,
   // so it never holds this back. Screens without Target Fields always show it.
@@ -1074,9 +1079,27 @@ export default function StatusMatcher() {
     const idx = pickerFields.findIndex((f) => f.field_key === fromKey);
     if (idx === -1) return;
     const next = pickerFields.slice(idx + 1).find((f) => !shouldSkipInAutoFlow(f, snapshot));
-    if (!next) return;
-    setFocusKey(next.field_key);
-    focusKeyRef.current = next.field_key;
+    if (next) {
+      setFocusKey(next.field_key);
+      focusKeyRef.current = next.field_key;
+      return;
+    }
+    // That was the last category (in マスター's 表示順): go back to one still
+    // unanswered, or — everything answered — move on to saving: show
+    // 保存しますか？ (はい / いいえ beside the mic), without starting the mic or
+    // speaking, since this came from a tap.
+    const pending = pickerFields.find(
+      (f) => f.field_key !== fromKey && !shouldSkipInAutoFlow(f, snapshot) && !isTargetFieldAnswered(f, snapshot)
+    );
+    if (pending) {
+      setFocusKey(pending.field_key);
+      focusKeyRef.current = pending.field_key;
+      return;
+    }
+    flowPhaseRef.current = "confirm-save";
+    lastFinalRef.current = "";
+    setAwaitingSaveConfirm(true);
+    setStatusMsg("💾 保存しますか？");
   };
 
   // Ends the voice-question flow once 保存しますか？ is answered (はい or いいえ):
@@ -1116,21 +1139,14 @@ export default function StatusMatcher() {
     goToField(first);
   };
 
-  // Restarts the auto-flow after returning from the 報告書 screen: picks up at
-  // the first Target Field still unanswered, or from the top if every field
-  // already has an answer.
+  // Restarts the auto-flow after returning from the 報告書 screen.
+  // Always from the top — the first category in マスター's 表示順 (うけとり) —
+  // not from the first unanswered one, so coming back never opens on an item
+  // further down the list (e.g. a newly added 状況).
   const resumeAutoFlow = () => {
     resumeFlowRef.current = false;
     if (!pickerFields.length) return;
-    const snapshot = valuesRef.current;
-    const pending = pickerFields.find((f) => !shouldSkipInAutoFlow(f, snapshot) && !isTargetFieldAnswered(f, snapshot));
-    if (!pending) {
-      startAutoFlow();
-      return;
-    }
-    flowPhaseRef.current = "field";
-    setAwaitingSaveConfirm(false);
-    goToField(pending);
+    startAutoFlow();
   };
 
   useEffect(() => {
@@ -1492,6 +1508,7 @@ export default function StatusMatcher() {
     if (/^コメント/.test(rawFinal)) {
       const comment = rawFinal.replace(/^コメント[:：]?\s*/, "");
       const group = getGroupTargetFields().find((g) => g.field_key === focusKeyRef.current);
+      if (group && group.comment === false) return;
       const currentKey = group ? group.anchorKey : focusKeyRef.current;
       const label = group ? group.field_label : fields.find((f) => f.field_key === currentKey)?.field_label;
       if (label) {

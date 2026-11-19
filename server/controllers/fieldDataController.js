@@ -8,7 +8,7 @@ const getStatusFields = async (req, res) => {
 
     if (screenKey) {
       result = await pool.query(
-        `SELECT field_key, field_label, field_type, phrases, order_index, screen_key
+        `SELECT *
          FROM status_fields
          WHERE screen_key=$1
          ORDER BY order_index, field_key`,
@@ -16,7 +16,7 @@ const getStatusFields = async (req, res) => {
       );
     } else {
       result = await pool.query(
-        `SELECT field_key, field_label, field_type, phrases, order_index, screen_key
+        `SELECT *
          FROM status_fields
          ORDER BY screen_key, order_index, field_key`
       );
@@ -33,7 +33,8 @@ const getStatusFields = async (req, res) => {
       } catch (e) {
         console.warn('Invalid phrases JSON for field', row.field_key, ':', row.phrases);
       }
-      return { ...row, phrases };
+      const config = row.config && typeof row.config === "object" ? row.config : {};
+      return { ...row, phrases, config };
     });
 
     res.json(fields);
@@ -53,6 +54,7 @@ const saveStatusField = async (req, res) => {
       field_type,
       phrases = [],
       order_index = 0,
+      config,
     } = req.body;
 
     if (!screen_key || !field_key)
@@ -74,7 +76,9 @@ const saveStatusField = async (req, res) => {
     // appears on the input screen and in マスター's list whichever client
     // saved it. Existing fields (e.g. うけとり's options being updated) are
     // left as they are.
-    if (screen_key === "daily_status") {
+    // (register_category: false — a plain report column created for a
+    // 食べ残し/体調/状況 option's check — is not a category of its own.)
+    if (screen_key === "daily_status" && req.body.register_category !== false) {
       const exists = await pool.query(
         `SELECT 1 FROM status_fields WHERE screen_key='daily_status' AND field_key=$1`,
         [field_key]
@@ -89,17 +93,33 @@ const saveStatusField = async (req, res) => {
       }
     }
 
-    await pool.query(
-      `INSERT INTO status_fields (screen_key, field_key, field_label, field_type, phrases, order_index)
-       VALUES ($1,$2,$3,$4,$5,$6)
-       ON CONFLICT (screen_key, field_key)
-       DO UPDATE SET
-         field_label = EXCLUDED.field_label,
-         field_type = EXCLUDED.field_type,
-         phrases = EXCLUDED.phrases,
-         order_index = EXCLUDED.order_index`,
-      [screen_key, field_key, field_label, field_type, JSON.stringify(phrases), order_index]
-    );
+    if (config && typeof config === "object") {
+      // Category settings from マスター (daily_target rows; migration 010).
+      await pool.query(
+        `INSERT INTO status_fields (screen_key, field_key, field_label, field_type, phrases, order_index, config)
+         VALUES ($1,$2,$3,$4,$5,$6,$7)
+         ON CONFLICT (screen_key, field_key)
+         DO UPDATE SET
+           field_label = EXCLUDED.field_label,
+           field_type = EXCLUDED.field_type,
+           phrases = EXCLUDED.phrases,
+           order_index = EXCLUDED.order_index,
+           config = EXCLUDED.config`,
+        [screen_key, field_key, field_label, field_type, JSON.stringify(phrases), order_index, JSON.stringify(config)]
+      );
+    } else {
+      await pool.query(
+        `INSERT INTO status_fields (screen_key, field_key, field_label, field_type, phrases, order_index)
+         VALUES ($1,$2,$3,$4,$5,$6)
+         ON CONFLICT (screen_key, field_key)
+         DO UPDATE SET
+           field_label = EXCLUDED.field_label,
+           field_type = EXCLUDED.field_type,
+           phrases = EXCLUDED.phrases,
+           order_index = EXCLUDED.order_index`,
+        [screen_key, field_key, field_label, field_type, JSON.stringify(phrases), order_index]
+      );
+    }
 
     res.json({ ok: true, message: "Field saved successfully" });
   } catch (e) {

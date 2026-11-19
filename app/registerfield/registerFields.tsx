@@ -37,12 +37,8 @@ import {
 import {
   TARGET_GROUP_SCREEN_KEY,
   HEADING_FIELD_TYPE,
-  HEADING_MULTI_FIELD_TYPE,
-  GROUP_MULTI_FIELD_TYPE,
-  GROUP_SINGLE_FIELD_TYPE,
   allCategoryConfigs,
-  isGroupKey,
-  isInputCategory,
+  categoryRow,
   optionDisplayNames,
 } from "@/app/lib/targetFields";
 
@@ -93,15 +89,8 @@ export default function RegisterFields() {
   const isDaily = form.screen_key === "daily_status";
   const dailyEntries = isDaily ? allCategoryConfigs(fields, groupRows) : [];
   const editingEntry = editingGroup ? dailyEntries.find((c) => c.field_key === editingGroup) : undefined;
-  const editingField = editingGroup
-    ? fields.find((f) => f.field_key === editingGroup && isInputCategory(f.field_key, groupRows))
-    : undefined;
-  const editorTarget: CategoryEditorTarget =
-    editingGroup && isGroupKey(editingGroup)
-      ? { kind: "group", fieldKey: editingGroup }
-      : editingField
-        ? { kind: "own", field: editingField }
-        : { kind: "new" };
+  // Every category is edited the same way; no editing → the editor adds one.
+  const editorTarget: CategoryEditorTarget = editingEntry ? { kind: "edit", config: editingEntry } : { kind: "new" };
   const editingLabel = editorTarget.kind === "new" ? "" : editingEntry?.label ?? "";
   const editingPosition = editingGroup ? dailyEntries.findIndex((c) => c.field_key === editingGroup) : -1;
   const [reordering, setReordering] = useState(false);
@@ -119,21 +108,8 @@ export default function RegisterFields() {
     try {
       for (let i = 0; i < ordered.length; i++) {
         const c = ordered[i];
-        await saveStatusField({
-          screen_key: TARGET_GROUP_SCREEN_KEY,
-          field_key: c.field_key,
-          field_label: c.label,
-          field_type:
-            c.kind === "group"
-              ? c.multiple
-                ? GROUP_MULTI_FIELD_TYPE
-                : GROUP_SINGLE_FIELD_TYPE
-              : c.multiple
-                ? HEADING_MULTI_FIELD_TYPE
-                : HEADING_FIELD_TYPE,
-          phrases: c.options,
-          order_index: i + 1,
-        });
+        // Same row as the editor saves, only the position changes.
+        await saveStatusField(categoryRow(c, i + 1));
       }
       setMessage({ type: "success", text: `「${moved.label}」を${to + 1}番目にしました` });
       await loadFields();
@@ -566,7 +542,7 @@ export default function RegisterFields() {
                                       ))}
                                     </div>
                                     <small className="text-muted">
-                                      {`${e.multiple ? "複数選択" : "単一選択"} • ${names.length}選択肢`}
+                                      {`${e.multiple ? "複数選択" : "単一選択"} • ${e.display === "text" ? "テキスト" : "チェック"} • ${names.length}選択肢${e.comment ? "" : " • コメントなし"}`}
                                     </small>
                                   </div>
                                   <div className="flex-shrink-0 d-flex gap-1">
