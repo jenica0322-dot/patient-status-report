@@ -1,13 +1,10 @@
 // app/registerfield/CategoryEditor.tsx
-// The one マスター editor for every 日次記録 category — うけとり, 食べ残し,
-// 体調 and categories added here — and for adding a new one. Same features
-// everywhere: label, 単一/複数選択, options (rename, reorder, delete) each
-// with optional follow-up choices (追加選択肢, e.g. 体調他 → 風邪).
-//
-// Where answers are saved differs (see app/lib/targetFields.ts):
-//   - 食べ残し / 体調 ("group"): each option picks its own 報告書 column.
-//   - うけとり / added categories ("own"): every option saves into the
-//     category's one column; its 報告書 column name is editable here.
+// The one マスター editor for every 日次記録 category — built-in or added —
+// and for adding a new one. Every category gets the same settings, each set
+// independently (see app/lib/targetFields.ts):
+//   ラベル / 表示順 / 選択方式 (単一・複数) / 報告書の表示 (テキスト・チェック) /
+//   報告書の列名 / 選択肢 (add, rename, delete, reorder, 追加選択肢) /
+//   コメント入力 (あり・なし).
 "use client";
 
 import React, { useState } from "react";
@@ -15,29 +12,34 @@ import { Card, Form, Button, ButtonGroup, InputGroup, Badge, Alert, Spinner } fr
 import { Plus, Trash, ArrowUp, ArrowDown, Check, List } from "react-bootstrap-icons";
 import { saveStatusField, deleteStatusField } from "@/app/lib/statusApi";
 import {
-  GROUP_MULTI_FIELD_TYPE,
-  GROUP_SINGLE_FIELD_TYPE,
-  HEADING_FIELD_TYPE,
-  HEADING_MULTI_FIELD_TYPE,
-  TARGET_GROUP_DEFS,
   TARGET_GROUP_SCREEN_KEY,
-  UKETORI_FIELD_KEY,
   allCategoryConfigs,
-  groupConfig,
-  ownConfig,
+  categoryRow,
+  categoryTextColumns,
+  type CategoryConfig,
   type CategoryOption,
+  type ReportDisplay,
 } from "@/app/lib/targetFields";
 import { addOptions, isAddEnter, splitOptions } from "./optionInput";
 
-type Row = { screen_key: string; field_key: string; field_label: string; field_type: string; phrases: any; order_index: number };
+type Row = {
+  screen_key: string;
+  field_key: string;
+  field_label: string;
+  field_type: string;
+  phrases: any;
+  order_index: number;
+  config?: any;
+};
 
-export type CategoryEditorTarget =
-  | { kind: "group"; fieldKey: string }
-  | { kind: "own"; field: Row }
-  | { kind: "new" };
+export type CategoryEditorTarget = { kind: "edit"; config: CategoryConfig } | { kind: "new" };
 
-// Report columns a 食べ残し / 体調 option can't save into.
-const EXCLUDED_COLUMNS = new Set([UKETORI_FIELD_KEY, "youbi", "memo"]);
+// Column-select value: create a new checkbox 報告書 column for this option
+// (named after it) when saving.
+const NEW_COLUMN = "__new_column__";
+
+// Columns an option can never tick.
+const EXCLUDED_COLUMNS = new Set(["youbi", "memo"]);
 const PATIENT_SELECT_FIELD_LABEL = "利用者選択";
 
 // A 日次記録 field key: any characters (Japanese included) except spaces and
@@ -58,10 +60,12 @@ type Props = {
   onMove?: (toIndex: number) => void;
 };
 
-// The values a category's column can hold — options, or their follow-ups.
+// The values a text column can hold — options, or their follow-ups.
 function leafNames(options: CategoryOption[]): string[] {
   return options.flatMap((o) => (o.sub?.length ? o.sub : [o.label]));
 }
+
+const uid = () => Date.now().toString(36);
 
 export default function CategoryEditor({
   target,
@@ -74,36 +78,37 @@ export default function CategoryEditor({
   total,
   onMove,
 }: Props) {
-  const isGroup = target.kind === "group";
   const isNew = target.kind === "new";
-  const initial =
-    target.kind === "group"
-      ? groupConfig(target.fieldKey, groupRows, dailyFields)
-      : target.kind === "own"
-        ? ownConfig(target.field, groupRows)
-        : null;
+  const initial = target.kind === "edit" ? target.config : undefined;
+  const colLabel = (key?: string) => dailyFields.find((f) => f.field_key === key)?.field_label ?? "";
 
   const [label, setLabel] = useState(initial?.label ?? "");
   const [multiple, setMultiple] = useState(initial?.multiple ?? false);
+  const [display, setDisplay] = useState<ReportDisplay>(initial?.display ?? "text");
+  const [comment, setComment] = useState(initial?.comment ?? true);
   const [options, setOptions] = useState<CategoryOption[]>(() =>
     (initial?.options ?? []).map((o) => ({ ...o, sub: o.sub ? [...o.sub] : undefined }))
   );
-  // 報告書 column name ("own" / new only).
-  const [reportName, setReportName] = useState(target.kind === "own" ? target.field.field_label : "");
+  // 報告書の列名 of the text column (text display).
+  const [reportName, setReportName] = useState(initial?.display === "text" ? colLabel(initial.column) : "");
+  // 列名 edits for the checkbox columns options tick (checkbox display).
+  const [colNames, setColNames] = useState<Record<string, string>>({});
   const [fieldKey, setFieldKey] = useState("");
   const [newOption, setNewOption] = useState("");
   const [newSub, setNewSub] = useState<Record<number, string>>({});
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
-  const def = isGroup ? TARGET_GROUP_DEFS.find((d) => d.field_key === target.fieldKey) : undefined;
+  // Columns an option can tick: 報告書 columns, but not a category's text
+  // answer column (うけとり, …).
+  const textColumns = categoryTextColumns(dailyFields, groupRows);
   const columns = dailyFields.filter(
-    (f) => !EXCLUDED_COLUMNS.has(f.field_key) && f.field_label !== PATIENT_SELECT_FIELD_LABEL
+    (f) => !EXCLUDED_COLUMNS.has(f.field_key) && f.field_label !== PATIENT_SELECT_FIELD_LABEL && !textColumns.has(f.field_key)
   );
-  const typeOf = (key?: string) => dailyFields.find((f) => f.field_key === key)?.field_type;
-  // Follow-up choices are saved as text: always fine for an "own" category,
-  // only on a text column for 食べ残し / 体調.
-  const canHaveSub = (o: CategoryOption) => !isGroup || (!!o.key && typeOf(o.key) !== "checkbox");
+  const typeOf = (key?: string) => (key === NEW_COLUMN ? "checkbox" : dailyFields.find((f) => f.field_key === key)?.field_type);
+  // Follow-up choices are saved as a name: fine with text display, and with
+  // checkbox display only on an option ticking a text column.
+  const canHaveSub = (o: CategoryOption) => display === "text" || (!!o.key && typeOf(o.key) !== "checkbox");
 
   const update = (i: number, patch: Partial<CategoryOption>) =>
     setOptions((prev) => prev.map((o, idx) => (idx === i ? { ...o, ...patch } : o)));
@@ -122,12 +127,19 @@ export default function CategoryEditor({
     setNewSub({});
   };
 
+  const switchDisplay = (d: ReportDisplay) => {
+    setDisplay(d);
+    if (d === "checkbox") {
+      // Options without a column get a new checkbox column by default.
+      setOptions((prev) => prev.map((o) => (o.key ? o : { ...o, key: NEW_COLUMN, sub: undefined })));
+    }
+  };
+
   // Several at once (「新聞、郵便、回覧板」); duplicates are skipped.
   const addOptionRows = () => {
     const names = splitOptions(newOption);
     if (!names.length) return;
     const existing = new Set(options.map((o) => o.label));
-    const used = new Set(options.map((o) => o.key).filter(Boolean));
     const added: CategoryOption[] = [];
     const duplicates: string[] = [];
     for (const n of names) {
@@ -136,14 +148,7 @@ export default function CategoryEditor({
         continue;
       }
       existing.add(n);
-      if (isGroup) {
-        // Pre-pick a column no other option uses (it can be changed).
-        const free = columns.find((c) => !used.has(c.field_key));
-        if (free) used.add(free.field_key);
-        added.push({ label: n, key: free?.field_key ?? "" });
-      } else {
-        added.push({ label: n });
-      }
+      added.push(display === "checkbox" ? { label: n, key: NEW_COLUMN } : { label: n });
     }
     setOptions((prev) => [...prev, ...added]);
     setNewOption("");
@@ -165,7 +170,7 @@ export default function CategoryEditor({
 
   const validate = (): string | null => {
     if (!label.trim()) return "ラベルを入力してください";
-    if (isNew) {
+    if (isNew && display === "text") {
       const key = fieldKey.trim();
       if (key) {
         if (!VALID_FIELD_KEY.test(key)) return "フィールドキーにスペースや / ? # % \\ は使えません（空欄で自動設定）";
@@ -181,9 +186,9 @@ export default function CategoryEditor({
       if (!l) return "選択肢名が空欄です";
       if (names.has(l)) return `選択肢「${l}」が重複しています`;
       names.add(l);
-      if (isGroup) {
+      if (display === "checkbox") {
         if (!o.key) return `「${l}」の保存先の列を選択してください`;
-        if (keys.has(o.key)) return `保存先の列が重複しています（「${l}」）`;
+        if (o.key !== NEW_COLUMN && keys.has(o.key)) return `保存先の列が重複しています（「${l}」）`;
         keys.add(o.key);
       }
       if (o.sub?.length && !canHaveSub(o)) return `「${l}」の追加選択肢はテキスト列にのみ設定できます`;
@@ -195,13 +200,6 @@ export default function CategoryEditor({
     return null;
   };
 
-  const cleanOptions = (): CategoryOption[] =>
-    options.map((o) => ({
-      label: o.label.trim(),
-      ...(isGroup ? { key: o.key } : {}),
-      ...(o.sub?.length ? { sub: o.sub } : {}),
-    }));
-
   const handleSave = async () => {
     const msg = validate();
     if (msg) {
@@ -211,56 +209,90 @@ export default function CategoryEditor({
     setError("");
     setSaving(true);
     try {
-      const opts = cleanOptions();
-      if (target.kind === "group") {
-        const existing = groupRows.find((r) => r.field_key === target.fieldKey);
+      const opts: CategoryOption[] = options.map((o) => ({
+        label: o.label.trim(),
+        ...(display === "checkbox" && o.key ? { key: o.key } : {}),
+        ...(o.sub?.length && canHaveSub(o) ? { sub: o.sub } : {}),
+      }));
+      let nextColumnOrder = Math.max(0, ...dailyFields.map((f) => f.order_index || 0)) + 1;
+      const catKey =
+        initial?.field_key ?? (display === "text" ? fieldKey.trim() || `field_${uid()}` : `cat_${uid()}`);
+      let column: string | undefined;
+
+      if (display === "text") {
+        // The one 報告書 column holding the answer: the category's existing
+        // text column, or a new one (new category / switched from チェック).
+        column =
+          initial?.display === "text" && initial.column
+            ? initial.column
+            : isNew
+              ? catKey
+              : `txt_${uid()}`;
+        const existingCol = dailyFields.find((f) => f.field_key === column);
         await saveStatusField({
-          screen_key: TARGET_GROUP_SCREEN_KEY,
-          field_key: target.fieldKey,
-          field_label: label.trim(),
-          field_type: multiple ? GROUP_MULTI_FIELD_TYPE : GROUP_SINGLE_FIELD_TYPE,
-          phrases: opts,
-          order_index: existing?.order_index ?? initial!.order,
-        });
-      } else {
-        // The category's own column (報告書 column + where answers are saved)…
-        const base =
-          target.kind === "own"
-            ? target.field
-            : {
-                screen_key: "daily_status",
-                field_key: fieldKey.trim() || `field_${Date.now().toString(36)}`,
-                field_type: "preset",
-                // New categories go after the existing ones.
-                order_index: Math.max(0, ...dailyFields.map((f) => f.order_index || 0)) + 1,
-              };
-        await saveStatusField({
-          ...base,
+          ...(existingCol ?? {
+            screen_key: "daily_status",
+            field_key: column,
+            field_type: "preset",
+            order_index: nextColumnOrder++,
+          }),
           field_label: reportName.trim() || label.trim(),
           phrases: leafNames(opts),
+          register_category: false,
         });
-        // …and its Status Input config (label, 単一/複数, options, 表示順 —
-        // kept as is; a new category goes last).
-        const existingRow = groupRows.find((r) => r.field_key === base.field_key);
-        const displayOrder =
-          existingRow?.order_index ??
-          (target.kind === "own"
-            ? initial!.order
-            : Math.max(0, ...allCategoryConfigs(dailyFields, groupRows).map((c) => c.order)) + 1);
-        await saveStatusField({
-          screen_key: TARGET_GROUP_SCREEN_KEY,
-          field_key: base.field_key,
-          field_label: label.trim(),
-          field_type: multiple ? HEADING_MULTI_FIELD_TYPE : HEADING_FIELD_TYPE,
-          phrases: opts,
-          order_index: displayOrder,
-        });
+      } else {
+        // 「＋ 新しいチェック列を作成」: a checkbox 報告書 column per such
+        // option (named after it); 列名 edits rename existing columns.
+        for (let i = 0; i < opts.length; i++) {
+          const o = opts[i];
+          if (o.key === NEW_COLUMN) {
+            const key = `chk_${uid()}_${i}`;
+            await saveStatusField({
+              screen_key: "daily_status",
+              field_key: key,
+              field_label: o.label,
+              field_type: "checkbox",
+              phrases: [],
+              order_index: nextColumnOrder++,
+              register_category: false,
+            });
+            opts[i] = { ...o, key };
+          }
+        }
+        for (const [key, name] of Object.entries(colNames)) {
+          const col = dailyFields.find((f) => f.field_key === key);
+          if (col && name.trim() && name.trim() !== col.field_label && opts.some((o) => o.key === key)) {
+            await saveStatusField({ ...col, field_label: name.trim(), register_category: false });
+          }
+        }
       }
+
+      // Where the comment is stored: kept if its column still exists, else
+      // the answer column / first ticked column.
+      const keepComment =
+        initial?.commentKey && dailyFields.some((f) => f.field_key === initial.commentKey) ? initial.commentKey : undefined;
+      const commentKey = keepComment ?? (display === "text" ? column : opts.find((o) => o.key)?.key);
+
+      const existingRow = groupRows.find((r) => r.field_key === catKey);
+      const order =
+        existingRow?.order_index ??
+        initial?.order ??
+        Math.max(0, ...allCategoryConfigs(dailyFields, groupRows).map((c) => c.order)) + 1;
+      await saveStatusField(
+        categoryRow(
+          { field_key: catKey, label: label.trim(), display, multiple, column, comment, commentKey, options: opts },
+          order
+        )
+      );
+
       if (isNew) {
         setLabel("");
         setMultiple(false);
+        setDisplay("text");
+        setComment(true);
         setOptions([]);
         setReportName("");
+        setColNames({});
         setFieldKey("");
         setNewSub({});
       }
@@ -273,16 +305,24 @@ export default function CategoryEditor({
     }
   };
 
-  // Only categories added here can be deleted (うけとり / 食べ残し / 体調 are built in).
-  const deletable = target.kind === "own" && target.field.field_key !== UKETORI_FIELD_KEY;
+  // Categories added in マスター can be deleted; built-in ones can't (their
+  // defaults would just come back).
+  const deletable = !!initial && !initial.builtin;
   const handleDelete = async () => {
-    if (target.kind !== "own") return;
-    if (!confirm(`「${label || target.field.field_label}」を削除しますか？\n状況入力と報告書から表示されなくなります（保存済みの記録データは残ります）。`))
+    if (!initial) return;
+    if (
+      !confirm(
+        `「${label || initial.label}」を削除しますか？\n状況入力に表示されなくなります（保存済みの記録データは残ります）。`
+      )
+    )
       return;
     setSaving(true);
     try {
-      await deleteStatusField(TARGET_GROUP_SCREEN_KEY, target.field.field_key);
-      await deleteStatusField(target.field.screen_key, target.field.field_key);
+      await deleteStatusField(TARGET_GROUP_SCREEN_KEY, initial.field_key);
+      // A text category's own answer column (created with it) goes too.
+      if (initial.display === "text" && initial.column === initial.field_key) {
+        await deleteStatusField("daily_status", initial.column);
+      }
       onDeleted?.();
     } catch (e) {
       console.error(e);
@@ -297,6 +337,17 @@ export default function CategoryEditor({
       fn();
     }
   };
+
+  const toggle = (on: boolean, a: string, b: string, set: (v: boolean) => void) => (
+    <ButtonGroup>
+      <Button variant={on ? "primary" : "outline-primary"} onClick={() => set(true)} aria-pressed={on}>
+        {a}
+      </Button>
+      <Button variant={!on ? "primary" : "outline-primary"} onClick={() => set(false)} aria-pressed={!on}>
+        {b}
+      </Button>
+    </ButtonGroup>
+  );
 
   return (
     <div>
@@ -315,12 +366,7 @@ export default function CategoryEditor({
       {!isNew && onMove && total !== undefined && position !== undefined && (
         <Form.Group className="mb-3">
           <Form.Label>表示順</Form.Label>
-          <Form.Select
-            value={position}
-            onChange={(e) => onMove(Number(e.target.value))}
-            disabled={saving}
-            style={{ maxWidth: 200 }}
-          >
+          <Form.Select value={position} onChange={(e) => onMove(Number(e.target.value))} disabled={saving} style={{ maxWidth: 200 }}>
             {Array.from({ length: total }, (_, i) => (
               <option key={i} value={i}>
                 {i + 1}番目
@@ -333,40 +379,36 @@ export default function CategoryEditor({
 
       <Form.Group className="mb-3">
         <Form.Label>選択方式</Form.Label>
-        <div>
-          <ButtonGroup>
-            <Button variant={!multiple ? "primary" : "outline-primary"} onClick={() => setMultiple(false)} aria-pressed={!multiple}>
-              単一選択
-            </Button>
-            <Button variant={multiple ? "primary" : "outline-primary"} onClick={() => setMultiple(true)} aria-pressed={multiple}>
-              複数選択
-            </Button>
-          </ButtonGroup>
-        </div>
+        <div>{toggle(!multiple, "単一選択", "複数選択", (v) => setMultiple(!v))}</div>
         <Form.Text muted>
           {multiple ? "いくつでも選べます（音声は「次へ」で次の項目へ）" : "1つ選ぶと次の項目へ進みます"}
         </Form.Text>
       </Form.Group>
 
-      {!isGroup && (
+      <Form.Group className="mb-3">
+        <Form.Label>報告書の表示</Form.Label>
+        <div>{toggle(display === "text", "テキスト", "チェック", (v) => switchDisplay(v ? "text" : "checkbox"))}</div>
+        <Form.Text muted>
+          {display === "text"
+            ? `1つの列に選んだ名前を記入します${multiple ? "（複数は「、」区切り）" : ""}`
+            : "選択肢ごとの列にチェック（✓）を付けます"}
+        </Form.Text>
+      </Form.Group>
+
+      {display === "text" && (
         <Form.Group className="mb-3">
           <Form.Label>報告書の列名</Form.Label>
-          <Form.Control
-            value={reportName}
-            onChange={(e) => setReportName(e.target.value)}
-            placeholder={isNew ? "空欄ならラベルと同じ" : ""}
-          />
-          <Form.Text muted>選んだ名前がこの列に保存されます</Form.Text>
+          <Form.Control value={reportName} onChange={(e) => setReportName(e.target.value)} placeholder="空欄ならラベルと同じ" />
         </Form.Group>
       )}
-      {isGroup && def && (
-        <Form.Text muted className="d-block mb-3">
-          各選択肢は報告書の列に保存されます・コメントは「
-          {dailyFields.find((f) => f.field_key === def.anchorKey)?.field_label ?? def.anchorKey}」列に保存されます
-        </Form.Text>
-      )}
 
-      {isNew && (
+      <Form.Group className="mb-3">
+        <Form.Label>コメント入力</Form.Label>
+        <div>{toggle(comment, "あり", "なし", setComment)}</div>
+        <Form.Text muted>状況入力でこの項目にコメント欄を表示します</Form.Text>
+      </Form.Group>
+
+      {isNew && display === "text" && (
         <Form.Group className="mb-3">
           <Form.Label>フィールドキー（任意）</Form.Label>
           <Form.Control value={fieldKey} onChange={(e) => setFieldKey(e.target.value)} placeholder="空欄で自動設定（日本語も可）" />
@@ -379,82 +421,102 @@ export default function CategoryEditor({
           選択肢管理{options.length > 0 && <span key="count" className="text-muted small ms-2">{options.length}件</span>}
         </Card.Header>
         <Card.Body className="d-flex flex-column gap-2">
-          {options.map((o, i) => (
-            <div key={i} className="border rounded-3 p-2" style={{ background: "var(--primary-bg)" }}>
-              <div className="d-flex flex-wrap gap-2 align-items-center">
-                <Form.Control
-                  style={{ flex: "1 1 140px", minWidth: 0 }}
-                  value={o.label}
-                  placeholder="選択肢名"
-                  onChange={(e) => update(i, { label: e.target.value })}
-                  aria-label="選択肢名"
-                />
-                {isGroup && (
-                  <Form.Select
-                    style={{ flex: "1 1 160px", minWidth: 0 }}
-                    value={o.key ?? ""}
-                    onChange={(e) => {
-                      const key = e.target.value;
-                      // Follow-up choices only make sense on a text column.
-                      update(i, typeOf(key) === "checkbox" ? { key, sub: undefined } : { key });
-                    }}
-                    aria-label="保存先の列"
-                  >
-                    <option value="">保存先の列…</option>
-                    {columns.map((c) => (
-                      <option key={c.field_key} value={c.field_key}>
-                        {c.field_label}（{c.field_type === "checkbox" ? "チェック" : "テキスト"}）
-                      </option>
-                    ))}
-                  </Form.Select>
-                )}
-                <div className="d-flex gap-1">
-                  <Button variant="outline-secondary" size="sm" onClick={() => move(i, -1)} disabled={i === 0} aria-label="上へ">
-                    <ArrowUp />
-                  </Button>
-                  <Button variant="outline-secondary" size="sm" onClick={() => move(i, 1)} disabled={i === options.length - 1} aria-label="下へ">
-                    <ArrowDown />
-                  </Button>
-                  <Button variant="outline-danger" size="sm" onClick={() => remove(i)} aria-label="削除">
-                    <Trash />
-                  </Button>
-                </div>
-              </div>
-
-              {canHaveSub(o) && (
-                <div className="mt-2 ps-2">
-                  <div className="small text-muted mb-1">追加選択肢（任意・選んだ名前が保存されます）</div>
-                  {!!o.sub?.length && (
-                    <div className="d-flex flex-wrap gap-2 mb-2">
-                      {o.sub.map((s) => (
-                        <Badge key={s} bg="primary" className="d-flex align-items-center gap-1 py-2 px-3" style={{ fontWeight: 500 }}>
-                          {s}
-                          <button
-                            type="button"
-                            className="btn-close btn-close-white"
-                            style={{ fontSize: "0.55rem" }}
-                            aria-label="削除"
-                            onClick={() => removeSub(i, s)}
-                          />
-                        </Badge>
+          {options.map((o, i) => {
+            const existingCol = display === "checkbox" && o.key && o.key !== NEW_COLUMN ? o.key : undefined;
+            return (
+              <div key={i} className="border rounded-3 p-2" style={{ background: "var(--primary-bg)" }}>
+                <div className="d-flex flex-wrap gap-2 align-items-center">
+                  <Form.Control
+                    style={{ flex: "1 1 140px", minWidth: 0 }}
+                    value={o.label}
+                    placeholder="選択肢名"
+                    onChange={(e) => update(i, { label: e.target.value })}
+                    aria-label="選択肢名"
+                  />
+                  {display === "checkbox" && (
+                    <Form.Select
+                      style={{ flex: "1 1 160px", minWidth: 0 }}
+                      value={o.key ?? ""}
+                      onChange={(e) => {
+                        const key = e.target.value;
+                        // Follow-up choices only make sense on a text column.
+                        update(i, typeOf(key) === "checkbox" ? { key, sub: undefined } : { key });
+                      }}
+                      aria-label="保存先の列"
+                    >
+                      <option value="">保存先の列…</option>
+                      {columns.map((c) => (
+                        <option key={c.field_key} value={c.field_key}>
+                          {c.field_label}（{c.field_type === "checkbox" ? "チェック" : "テキスト"}）
+                        </option>
                       ))}
-                    </div>
+                      <option value={NEW_COLUMN}>＋ 新しいチェック列を作成（「{o.label.trim() || "選択肢名"}」）</option>
+                    </Form.Select>
                   )}
-                  <InputGroup size="sm">
-                    <Form.Control
-                      placeholder="追加選択肢（「、」区切りで複数可）"
-                      value={newSub[i] || ""}
-                      onChange={(e) => setNewSub((m) => ({ ...m, [i]: e.target.value }))}
-                      onKeyDown={enterAdds(() => addSub(i))}
-                    />
-                    <Button variant="outline-primary" onClick={() => addSub(i)} aria-label="追加">
-                      <Plus />
+                  <div className="d-flex gap-1">
+                    <Button variant="outline-secondary" size="sm" onClick={() => move(i, -1)} disabled={i === 0} aria-label="上へ">
+                      <ArrowUp />
                     </Button>
-                  </InputGroup>
+                    <Button
+                      variant="outline-secondary"
+                      size="sm"
+                      onClick={() => move(i, 1)}
+                      disabled={i === options.length - 1}
+                      aria-label="下へ"
+                    >
+                      <ArrowDown />
+                    </Button>
+                    <Button variant="outline-danger" size="sm" onClick={() => remove(i)} aria-label="削除">
+                      <Trash />
+                    </Button>
+                  </div>
                 </div>
-              )}
-            </div>
-          ))}
+
+                {existingCol && (
+                  <InputGroup size="sm" className="mt-2">
+                    <InputGroup.Text>報告書の列名</InputGroup.Text>
+                    <Form.Control
+                      value={colNames[existingCol] ?? colLabel(existingCol)}
+                      onChange={(e) => setColNames((m) => ({ ...m, [existingCol]: e.target.value }))}
+                    />
+                  </InputGroup>
+                )}
+
+                {canHaveSub(o) && (
+                  <div className="mt-2 ps-2">
+                    <div className="small text-muted mb-1">追加選択肢（任意・選んだ名前が保存されます）</div>
+                    {!!o.sub?.length && (
+                      <div className="d-flex flex-wrap gap-2 mb-2">
+                        {o.sub.map((s) => (
+                          <Badge key={s} bg="primary" className="d-flex align-items-center gap-1 py-2 px-3" style={{ fontWeight: 500 }}>
+                            {s}
+                            <button
+                              type="button"
+                              className="btn-close btn-close-white"
+                              style={{ fontSize: "0.55rem" }}
+                              aria-label="削除"
+                              onClick={() => removeSub(i, s)}
+                            />
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
+                    <InputGroup size="sm">
+                      <Form.Control
+                        placeholder="追加選択肢（「、」区切りで複数可）"
+                        value={newSub[i] || ""}
+                        onChange={(e) => setNewSub((m) => ({ ...m, [i]: e.target.value }))}
+                        onKeyDown={enterAdds(() => addSub(i))}
+                      />
+                      <Button variant="outline-primary" onClick={() => addSub(i)} aria-label="追加">
+                        <Plus />
+                      </Button>
+                    </InputGroup>
+                  </div>
+                )}
+              </div>
+            );
+          })}
 
           <InputGroup>
             <Form.Control
