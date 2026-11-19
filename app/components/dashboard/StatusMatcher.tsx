@@ -459,9 +459,10 @@ export default function StatusMatcher() {
   const [fieldMenuOpen, setFieldMenuOpen] = useState(false);
   // Selected but not yet uploaded — local object URLs only, discarded unless 保存 is pressed.
   const [pendingPhotos, setPendingPhotos] = useState<{ id: number; file: File; url: string }[]>([]);
-  // Just uploaded by 保存 — kept in the photo strip (marked 保存済み) so saving
-  // doesn't make the strip disappear and shift the screen. Cleared with the
-  // pending ones (patient/date/screen change) or replaced by the next photo.
+  // Just uploaded by 保存 — their thumbnails' space stays in the photo strip
+  // (empty) so saving doesn't make the strip disappear and shift the screen.
+  // Cleared with the pending ones (patient/date/screen change) or replaced by
+  // the next photo.
   const [savedPhotos, setSavedPhotos] = useState<{ id: number; file: File; url: string }[]>([]);
   const savedPhotosRef = useRef(savedPhotos);
   savedPhotosRef.current = savedPhotos;
@@ -1598,9 +1599,9 @@ export default function StatusMatcher() {
       // Pending previews are only actually uploaded once the record itself has saved.
       const toUpload = pendingPhotosRef.current;
       if (toUpload.length > 0) {
-        // Uploaded and attached to the record now. The previews stay where
-        // they are, marked 保存済み, so the strip keeps its size (no layout
-        // shift after 保存).
+        // Uploaded and attached to the record now. The thumbnails go, but
+        // their space is kept so the strip keeps its size (no layout shift
+        // after 保存).
         await uploadStatusPhotos({ ...baseParams, files: toUpload.map((p) => p.file) });
         savedPhotosRef.current.forEach((p) => URL.revokeObjectURL(p.url));
         setSavedPhotos(toUpload);
@@ -1699,27 +1700,22 @@ export default function StatusMatcher() {
               disabled={savingRecord || !allTargetFieldsAnswered}
               aria-busy={savingRecord}
             >
+              {/* While saving only the icon turns into a same-size spinner; the
+                  label stays 「保存」, so the button never changes size. */}
               {savingRecord
                 ? <Spinner key="saving-spinner" animation="border" size="sm" className={styles.saveSpinner} />
                 : <FloppyFill key="save-icon" size="1em" />}
-              {/* Both labels share one grid cell, so the button is always as
-                  wide as 「保存中…」 and doesn't resize while saving. */}
-              <span className={styles.saveLabel}>
-                <span style={savingRecord ? { visibility: "hidden" } : undefined}>保存</span>
-                <span style={savingRecord ? undefined : { visibility: "hidden" }}>保存中…</span>
-              </span>
+              <span>保存</span>
             </button>
           )}
         </div>
 
         {selectedPatient && (pendingDisplay.length > 0 || savedPhotos.length > 0) && (
           <div className={styles.photoStrip}>
+            {/* After 保存 the uploaded photo's thumbnail goes away, but its
+                space is kept (empty) so nothing below moves up. */}
             {savedPhotos.map((photo) => (
-              <div key={`saved-${photo.id}`} className={`${styles.photoThumb} ${styles.photoThumbSaved}`}>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={photo.url} alt={photo.file.name || "写真"} />
-                <span className={`${styles.photoThumbPendingBadge} ${styles.photoThumbSavedBadge}`}>保存済み</span>
-              </div>
+              <div key={`saved-${photo.id}`} className={styles.photoThumb} style={{ visibility: "hidden" }} aria-hidden="true" />
             ))}
             {pendingDisplay.map((photo, i) => (
               <div
