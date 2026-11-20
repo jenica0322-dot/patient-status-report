@@ -290,8 +290,8 @@ export default function RegisterFields() {
           <FileText size={22} />
         </div>
         <div>
-          <h1 className="h4 mb-0 fw-bold">フィールド登録・管理</h1>
-          <p className="text-muted mb-0 small">記録項目のマスターデータを管理します</p>
+          <h1 className="page-title mb-0">フィールド登録・管理</h1>
+          <p className="page-subtitle mb-0">記録項目のマスターデータを管理します</p>
         </div>
       </div>
 
@@ -316,7 +316,6 @@ export default function RegisterFields() {
                         if (!leaveLayoutTab()) return;
                         if (form.screen_key !== s.key) handleScreenChange(s.key);
                       }}
-                      style={{ fontSize: 18 }}
                     >
                       {s.label}
                     </Button>
@@ -328,7 +327,6 @@ export default function RegisterFields() {
                       setMessage(null);
                       setLayoutTab(true);
                     }}
-                    style={{ fontSize: 18 }}
                   >
                     報告書レイアウト
                   </Button>
@@ -339,9 +337,9 @@ export default function RegisterFields() {
                 <ReportLayoutSettings onDirtyChange={(d) => (layoutDirtyRef.current = d)} />
               ) : (
               <Row>
-                <Col md={7}>
-                  <Card className="mb-3 mb-md-0">
-                    <Card.Header style={{ fontSize: 18 }}>
+                <Col lg={7}>
+                  <Card className="mb-3 mb-lg-0">
+                    <Card.Header>
                       <Database className="me-2" />
                       フィールド情報
                       {isDaily && (
@@ -439,7 +437,7 @@ export default function RegisterFields() {
                             <Card.Body>
                               {form.phrases.length > 0 && (
                                 <div className="mb-3">
-                                  <h6 className="text-muted small text-uppercase mb-2">登録済みフレーズ</h6>
+                                  <h6 className="form-label mb-2">登録済みフレーズ</h6>
                                   <div className="d-flex flex-wrap gap-2">
                                     {form.phrases.map((p, idx) => (
                                       <Badge
@@ -487,7 +485,6 @@ export default function RegisterFields() {
                             variant="primary"
                             size="lg"
                             onClick={handleSave}
-                            style={{ fontSize: 20 }}
                             disabled={loading}
                           >
                             {loading ? (
@@ -509,9 +506,9 @@ export default function RegisterFields() {
                   </Card>
                 </Col>
 
-                <Col md={5}>
+                <Col lg={5}>
                   <Card>
-                    <Card.Header style={{ fontSize: 18 }}>
+                    <Card.Header>
                       <List className="me-2" />
                       登録済みフィールド ({isDaily ? dailyEntries.length : fields.length})
                     </Card.Header>

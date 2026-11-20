@@ -532,18 +532,18 @@ export default function CategoryEditor({
         </Card.Body>
       </Card>
 
-      <div className="d-flex gap-2">
+      <div className="d-flex flex-wrap gap-2">
         {deletable && (
-          <Button variant="outline-danger" size="lg" onClick={handleDelete} disabled={saving} aria-label="削除" style={{ fontSize: 18 }}>
+          <Button variant="outline-danger" size="lg" onClick={handleDelete} disabled={saving} aria-label="削除">
             <Trash />
           </Button>
         )}
         {onCancel && (
-          <Button variant="outline-secondary" size="lg" onClick={onCancel} disabled={saving} style={{ fontSize: 18 }}>
+          <Button variant="outline-secondary" size="lg" onClick={onCancel} disabled={saving}>
             キャンセル
           </Button>
         )}
-        <Button variant="primary" size="lg" className="flex-grow-1" onClick={handleSave} disabled={saving} style={{ fontSize: 20 }}>
+        <Button variant="primary" size="lg" className="flex-grow-1" onClick={handleSave} disabled={saving}>
           {saving ? (
             <span key="saving">
               <Spinner animation="border" size="sm" className="me-2" />
