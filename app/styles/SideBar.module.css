@@ -98,12 +98,12 @@
   background-color: var(--selected-bg, #d1fae5);
   color: var(--brand-700, #0f766e);
   border-left-color: var(--brand-600, #0d9488);
-  font-weight: 700;
+  font-weight: var(--fw-title);
 }
 
 .buttonText {
   margin-left: 0.9rem;
-  font-size: 16px;
+  font-size: var(--fs-button);
   opacity: 1;
   transition: all 0.2s ease-in-out;
 }
@@ -157,12 +157,12 @@
 }
 
 .employeeName {
-  font-weight: 600;
+  font-weight: var(--fw-title);
   display: block;
   word-wrap: break-word;
   opacity: 1;
   transition: all 0.2s;
-  font-size: 16px;
+  font-size: var(--fs-body);
   color: var(--primary-text, #1e293b);
 }
 
@@ -182,7 +182,7 @@
   background-color: var(--brand-50, #f0fdfa);
   color: var(--brand-800, #115e59);
   border: 1px solid var(--brand-100, #ccfbf1);
-  font-size: 16px;
+  font-size: var(--fs-label);
 }
 
 .toggleButton {
@@ -203,6 +203,12 @@
   color: var(--brand-700, #0f766e);
 }
 
+/* Bootstrap's offcanvas is a fixed 400px wide, wider than most phones, which
+   pushes its close (×) button off the right edge. Cap it to the screen. */
+.offcanvas.offcanvas {
+  --bs-offcanvas-width: min(320px, 85vw);
+}
+
 .offcanvas {
   background-color: #ffffff;
   color: var(--primary-text, #1e293b);
@@ -214,12 +220,9 @@
   margin: 0.5rem 0;
 }
 
-/* Phone menu (offcanvas) only — larger text and icons for easier reading
-   and tapping. The desktop sidebar keeps its own sizes. */
-.offcanvas :global(.offcanvas-title) {
-  font-size: 22px;
-  font-weight: 700;
-}
+/* Phone menu (offcanvas) only — one step larger text and icons for easier
+   reading and tapping. The desktop sidebar keeps its own sizes. The
+   "メニュー" title uses the shared section-title style (globals.css). */
 
 .offcanvas .avatar {
   width: 64px;
@@ -228,11 +231,11 @@
 }
 
 .offcanvas .employeeName {
-  font-size: 20px;
+  font-size: var(--fs-section-title);
 }
 
 .offcanvas .patientCard {
-  font-size: 18px;
+  font-size: var(--fs-body);
   padding: 0.75rem;
 }
 
@@ -241,7 +244,7 @@
 }
 
 .offcanvas .buttonText {
-  font-size: 20px;
+  font-size: var(--fs-button-lg);
 }
 
 .offcanvas .sidebarButton svg {

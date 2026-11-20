@@ -451,7 +451,7 @@ export default function ReportLayoutSettings({ onDirtyChange }: { onDirtyChange?
                       onDelete={() => deleteBlock(i)}
                     />
                   </div>
-                  <Form.Label className="small text-muted mb-1 mt-2">選択肢</Form.Label>
+                  <Form.Label className="mb-1 mt-2">選択肢</Form.Label>
                   <OptionsEditor options={b.options} onChange={(options) => updateBlock(i, { options })} />
                   <div className={styles.freeTextRow}>
                     <Form.Check
@@ -536,7 +536,7 @@ export default function ReportLayoutSettings({ onDirtyChange }: { onDirtyChange?
                   </div>
                   {it.type === "checklist" && (
                     <>
-                      <Form.Label className="small text-muted mb-1 mt-2">選択肢</Form.Label>
+                      <Form.Label className="mb-1 mt-2">選択肢</Form.Label>
                       <OptionsEditor options={it.options} onChange={(options) => updateItem(i, { options })} />
                       {it.options.length === 0 && <div className="text-danger small mt-1">選択肢を1つ以上追加してください</div>}
                     </>

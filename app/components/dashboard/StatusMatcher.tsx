@@ -1692,7 +1692,7 @@ export default function StatusMatcher() {
           {selectedPatient && (
             <button
               type="button"
-              className={`btn btn-success ms-auto px-4 fw-bold ${styles.photoUploadBtn} ${styles.toolbarBtn} ${styles.primaryBtn}`}
+              className={`btn btn-success ms-auto px-4 ${styles.photoUploadBtn} ${styles.toolbarBtn} ${styles.primaryBtn}`}
               style={allTargetFieldsAnswered ? undefined : { visibility: "hidden" }}
               aria-hidden={!allTargetFieldsAnswered}
               tabIndex={allTargetFieldsAnswered ? undefined : -1}
@@ -1979,7 +1979,7 @@ export default function StatusMatcher() {
 
                 {focusField && !focusGroupField && focusField.field_type === "text" && (
                   <div key={`text-${focusField.field_key}`} className="mt-1">
-                    <label className="form-label fw-semibold text-muted text-uppercase small mb-1">
+                    <label className="form-label mb-1">
                       値（手入力）
                     </label>
                     <textarea

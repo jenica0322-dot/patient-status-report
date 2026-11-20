@@ -50,7 +50,7 @@ export default function LoginForm() {
         <div className={styles.iconBadge}>
           <ClipboardHeart size={26} />
         </div>
-        <h3 className={styles.title}>ログイン</h3>
+        <h1 className={`page-title ${styles.title}`}>ログイン</h1>
         <p className={styles.subtitle}>状況記録表兼報告書へようこそ</p>
 
         <Form onSubmit={handleSubmit} autoComplete="off" suppressHydrationWarning>

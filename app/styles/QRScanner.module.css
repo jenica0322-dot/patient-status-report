@@ -20,8 +20,8 @@
 
 .title {
   color: #f1f5f9;
-  font-size: 0.9rem;
-  font-weight: 600;
+  font-size: var(--fs-button);
+  font-weight: var(--fw-title);
 }
 
 .iconButton {
@@ -66,8 +66,9 @@
 
 .scanFrame {
   position: absolute;
-  width: min(70vw, 280px);
-  height: min(70vw, 280px);
+  /* vmin, so a phone held sideways (short screen) still fits the frame. */
+  width: min(70vmin, 280px);
+  height: min(70vmin, 280px);
   border: 3px solid rgba(16, 185, 129, 0.9);
   border-radius: 16px;
   box-shadow: 0 0 0 9999px rgba(15, 23, 42, 0.35);
@@ -83,7 +84,7 @@
   justify-content: center;
   gap: 0.75rem;
   color: #e2e8f0;
-  font-size: 0.85rem;
+  font-size: var(--fs-label);
   text-align: center;
   padding: 1rem;
 }
