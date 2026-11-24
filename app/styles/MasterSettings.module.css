@@ -16,8 +16,7 @@
 /* Save / discard / reset — stays in view while scrolling the item list. */
 .actionBar {
   position: sticky;
-  /* Below the fixed page header, not hidden behind it. */
-  top: calc(var(--header-h, 64px) + 0.25rem);
+  top: 0;
   z-index: 20;
   display: flex;
   align-items: center;
@@ -34,10 +33,9 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  flex-wrap: wrap;
   gap: 0.5rem;
-  font-size: var(--fs-section-title);
-  font-weight: var(--fw-title);
+  font-size: 17px;
+  font-weight: 700;
 }
 
 .itemCard {
@@ -99,7 +97,7 @@
   border: 1px solid var(--border-color-strong, #b9c2cc);
   border-radius: 999px;
   background: #f8fafc;
-  font-size: var(--fs-label);
+  font-size: 14px;
 }
 
 .chipLabel {
@@ -148,15 +146,14 @@
 
 .keyNote {
   margin-top: 0.4rem;
-  font-size: var(--fs-helper);
+  font-size: 11px;
   color: var(--secondary-text, #6c757d);
 }
 
 /* ---- Preview ---- */
 .previewCard {
   position: sticky;
-  /* Below the fixed header and the sticky save bar above it. */
-  top: calc(var(--header-h, 64px) + 4rem);
+  top: 4.5rem;
 }
 
 .previewScroll {

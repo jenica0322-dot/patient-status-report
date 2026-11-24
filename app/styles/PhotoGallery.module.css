@@ -15,8 +15,8 @@
 }
 
 .galleryGroupLabel {
-  font-size: var(--fs-label);
-  font-weight: var(--fw-label);
+  font-size: 0.8rem;
+  font-weight: 700;
   color: var(--secondary-text, #64748b);
   text-transform: uppercase;
   letter-spacing: 0.04em;

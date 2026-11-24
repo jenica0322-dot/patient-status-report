@@ -15,8 +15,8 @@
   border: none;
   border-radius: var(--radius-md, 10px);
   padding: 10px 16px;
-  font-size: var(--fs-button);
-  font-weight: var(--fw-button);
+  font-size: 14px;
+  font-weight: 600;
   cursor: pointer;
   box-shadow: var(--shadow-md, 0 4px 12px rgba(0, 0, 0, 0.15));
   transition: all 0.2s ease-in-out;

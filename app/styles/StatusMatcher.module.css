@@ -11,11 +11,11 @@
   /* One shared size for every field label and the values/content next to
      them, kept as variables so every label and every piece of text reads
      at the same size instead of each section drifting to its own. */
-  --text-fs: var(--fs-label);
-  --label-fs: var(--fs-label);
+  --text-fs: 0.85rem;
+  --label-fs: var(--text-fs);
   /* Dense list rows (候補 options, saved-values summary) read smaller than
      the rest of the page's text/labels. */
-  --list-fs: var(--fs-helper);
+  --list-fs: 0.72rem;
   /* Exactly one screen tall under the fixed header (minus <main>'s bottom
      padding), so the page never scrolls. The 対象利用者 panel flexes to take
      whatever height is left; everything else keeps its natural size. */
@@ -48,7 +48,7 @@
 
 .wrapper > :global(.card) :global(.card-title) {
   margin-bottom: 0.25rem;
-  font-size: var(--fs-label);
+  font-size: var(--list-fs);
 }
 
 /* Candidate/summary list rows (the 候補 list and the saved-values list at
@@ -90,7 +90,7 @@
 /* Scoped to this page only — shrinks the date/month inputs and textareas
    below without touching Bootstrap's global .form-control elsewhere. */
 .wrapper :global(.form-control) {
-  font-size: var(--fs-input);
+  font-size: var(--text-fs);
 }
 
 .wrapper :global(textarea.form-control) {
@@ -114,14 +114,16 @@
   align-items: center;
 }
 
-/* 日次記録 / 記録日 / 写真追加 / QR読取 / 保存 — the shared button / input
-   text size. Doubled class beats Bootstrap's .btn-sm / .form-control-sm. */
+/* 日次記録 / 記録日 / 写真追加 / QR読取 / 保存 — 18px text. Doubled class
+   beats Bootstrap's .btn-sm / .form-control-sm font size. */
 .toolbarBtn.toolbarBtn {
-  font-size: var(--fs-button);
+  font-size: 18px;
 }
 
+/* 記録日 date box — a little smaller than the toolbar buttons. 16px is the
+   smallest size that keeps iOS Safari from zooming in when it's tapped. */
 .scopeBarControls input.toolbarBtn.toolbarBtn {
-  font-size: var(--fs-input);
+  font-size: 16px;
 }
 
 /* 記録日 box matches the buttons' height and rounding. */
@@ -138,7 +140,7 @@ button.toolbarBtn.toolbarBtn {
   min-height: 48px;
   padding: 0.35rem 1.1rem;
   border-radius: 14px;
-  font-weight: var(--fw-button);
+  font-weight: 700;
   line-height: 1.2;
   --bs-btn-border-width: 2px;
   display: inline-flex;
@@ -318,7 +320,7 @@ button.toolbarBtn > svg {
 
 .targetBox label {
   font-size: var(--label-fs);
-  font-weight: var(--fw-label);
+  font-weight: 600;
   color: var(--secondary-text);
   display: block;
   margin-bottom: 0.2rem;
@@ -341,8 +343,8 @@ button.toolbarBtn > svg {
    targets. Row height and text scale with the screen height (clamped), so the
    longest list (体調, 5 rows) always fits on screen without scrolling. */
 .choiceTitle {
-  font-size: var(--fs-section-title);
-  font-weight: var(--fw-title);
+  font-size: 20px;
+  font-weight: 700;
   /* One line on every screen so the heading height never changes. */
   white-space: nowrap;
   overflow: hidden;
@@ -419,15 +421,6 @@ button.toolbarBtn > svg {
   line-height: 1.2;
 }
 
-/* PC: a little smaller than on phones (rows are taller there). Mouse/trackpad
-   devices only, so a phone (e.g. iPhone 16, 393px wide; 852px turned
-   sideways) always keeps the phone size. */
-@media (min-width: 769px) and (pointer: fine) {
-  .choiceLabel {
-    font-size: clamp(20px, calc(var(--row-h, 52px) * 0.55), 26px);
-  }
-}
-
 /* コメント（自由入力） — its own card below the Target Field panel */
 .commentBox {
   background: var(--primary-bg);
@@ -437,13 +430,33 @@ button.toolbarBtn > svg {
   box-shadow: var(--shadow-md);
 }
 
+/* Comment dictation on (「コメント」 said): the box is outlined in the accent
+   colour and the label shows that speech is going into it. */
+.commentBoxActive {
+  border-color: var(--accent-text);
+  box-shadow: 0 0 0 3px var(--accent-bg), var(--shadow-md);
+}
+
+.commentDictating {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-left: auto;
+  padding: 0.1rem 0.55rem;
+  font-size: 0.75em;
+  font-weight: 600;
+  color: var(--accent-text);
+  background: var(--accent-bg);
+  border-radius: 999px;
+}
+
 .commentLabel {
   display: flex;
   align-items: center;
   gap: 0.4rem;
   margin-bottom: 0.3rem;
-  font-size: var(--fs-section-title);
-  font-weight: var(--fw-title);
+  font-size: 18px;
+  font-weight: 700;
   color: var(--accent-text);
 }
 
@@ -452,7 +465,7 @@ button.toolbarBtn > svg {
   width: 100%;
   min-height: 44px;
   padding: 0.4rem 0.6rem;
-  font-size: var(--fs-input);
+  font-size: var(--text-fs);
   line-height: 1.4;
   color: var(--primary-text);
   background: var(--secondary-bg);
@@ -684,7 +697,7 @@ button.toolbarBtn > svg {
   justify-content: space-between;
   gap: 0.5rem;
   padding: 0.3rem 0.6rem;
-  font-size: var(--fs-input);
+  font-size: var(--text-fs);
   border-radius: 10px;
   border: 2px solid var(--border-color);
   background: var(--primary-bg);
@@ -740,7 +753,7 @@ button.toolbarBtn > svg {
   border: none;
   background: transparent;
   color: var(--primary-text);
-  font-size: var(--fs-input);
+  font-size: var(--text-fs);
   cursor: pointer;
 }
 
@@ -780,8 +793,8 @@ button.toolbarBtn > svg {
   border-radius: 12px;
   border: 2px solid var(--border-color);
   background: var(--secondary-bg);
-  font-size: var(--fs-button);
-  font-weight: var(--fw-title);
+  font-size: var(--text-fs);
+  font-weight: 700;
   cursor: pointer;
   transition: all 0.2s ease;
 }
@@ -836,6 +849,7 @@ button.toolbarBtn > svg {
   /* Phones: the toolbar wraps to two lines, so slimmer buttons and tighter
      cards leave the 5 choice rows enough height to stay easy to tap. */
   .toolbarBtn.toolbarBtn {
+    font-size: 16px;
     padding-top: 0.2rem;
     padding-bottom: 0.2rem;
   }
@@ -877,17 +891,29 @@ button.toolbarBtn > svg {
     margin-top: 0.2rem;
   }
 
+  .choiceTitle {
+    font-size: 17px;
+  }
+
   .commentBox {
     padding: 0.3rem 0.5rem 0.4rem;
   }
 
   .commentLabel {
+    font-size: 15px;
     margin-bottom: 0.2rem;
   }
 
   .commentInput {
     min-height: 36px;
     padding: 0.25rem 0.6rem;
+  }
+
+  /* iOS Safari zooms the page in when an input under 16px is focused, which
+     leaves it zoomed and scrolling sideways — keep text inputs at 16px here. */
+  .wrapper :global(.form-control),
+  .commentInput {
+    font-size: 16px;
   }
 }
 
@@ -1110,30 +1136,15 @@ button.toolbarBtn > svg {
     --choice-gap: 0.1rem;
   }
 
+  .choiceTitle {
+    font-size: 17px;
+  }
+
+  .commentLabel {
+    font-size: 15px;
+  }
+
   .commentInput {
     min-height: 34px;
-  }
-}
-
-/* ---------- Very short screens (a phone held sideways) ----------
-   Under ~500px of height the one-screen layout above can't fit: the choice
-   rows would be squeezed to a few pixels and the rest cut off by
-   overflow: hidden. Here the page scrolls normally instead, and the
-   対象利用者 panel keeps a usable height so every option row stays tappable.
-   Portrait phones, tablets and PCs are unaffected. */
-@media (max-height: 500px) {
-  :global(html):has(.wrapper),
-  :global(body):has(.wrapper) {
-    overflow-y: auto;
-  }
-
-  .wrapper {
-    height: auto;
-    overflow: visible;
-  }
-
-  .wrapper > .targetBox {
-    flex: 0 0 auto;
-    min-height: 340px;
   }
 }

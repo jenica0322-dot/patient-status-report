@@ -29,6 +29,9 @@ export type GroupTargetField = {
   field_label: string;
   // Short name read out by the voice-over (e.g. 体調), not the full heading.
   spokenLabel: string;
+  // Every name that, said aloud, opens this category: its 報告書の列名
+  // (text display), its short name and its full マスター label.
+  voiceNames: string[];
   // Where the category's comment is stored.
   anchorKey: string;
   options: GroupOption[];
@@ -176,6 +179,8 @@ export type CategoryConfig = {
   builtin: boolean;
   label: string;
   spokenLabel: string;
+  // 報告書の列名 of the text column (text display only).
+  reportColumnName?: string;
   display: ReportDisplay;
   multiple: boolean;
   column?: string;
@@ -189,6 +194,14 @@ export type CategoryConfig = {
   // Position chosen in マスター, if any.
   rowOrder?: number;
 };
+
+// A category's short spoken name from its マスター ラベル: drops the
+// 「…を選択（複数選択可）」 heading wording and a trailing 状況 — unless 状況
+// is the whole name (「状況を選択」→「状況」).
+export function categoryNameFromLabel(label: string): string {
+  const base = label.trim().replace(/を選択.*$/, "").trim();
+  return base.replace(/状況$/, "") || base;
+}
 
 function settingsOf(row: MasterRow | undefined): StoredCategorySettings {
   return row?.config && typeof row.config === "object" ? (row.config as StoredCategorySettings) : {};
@@ -230,11 +243,16 @@ function readCategory(key: string, row: MasterRow | undefined, dailyFields: Mast
     field_key: key,
     builtin: !!def,
     label,
+    // Always from マスター, so a rename there changes what's announced and
+    // recognized: the 報告書の列名 (text display), otherwise the category's
+    // ラベル shortened (「食べ残し状況を選択」→「食べ残し」). The built-in
+    // name is only a last resort when neither gives anything.
     spokenLabel:
-      def?.spokenLabel ??
-      (display === "text" && columnRow?.field_label
-        ? columnRow.field_label
-        : label.replace(/(状況)?を選択.*$/, "") || label),
+      (display === "text" && columnRow?.field_label?.trim()) ||
+      categoryNameFromLabel(label) ||
+      def?.spokenLabel ||
+      label,
+    reportColumnName: display === "text" ? columnRow?.field_label?.trim() || undefined : undefined,
     display,
     multiple,
     column,
@@ -342,6 +360,13 @@ export function buildGroupTargetFields(targetRows: MasterRow[], dailyFields: Mas
       field_key: c.field_key,
       field_label: c.label,
       spokenLabel: c.spokenLabel,
+      voiceNames: [
+        ...new Set(
+          [c.reportColumnName, c.spokenLabel, categoryNameFromLabel(c.label), c.label]
+            .map((n) => n?.trim())
+            .filter((n): n is string => !!n)
+        ),
+      ],
       anchorKey: c.commentKey ?? c.column ?? options[0]?.key ?? c.field_key,
       options,
       multiple: c.multiple,
