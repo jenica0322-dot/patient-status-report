@@ -6,9 +6,9 @@
 }
 
 .label {
-  /* "対象利用者" — the shared field-label style. */
-  font-size: var(--fs-label);
-  font-weight: var(--fw-label);
+  /* "対象利用者" label and the selected patient name (.trigger) are both 18px. */
+  font-size: 18px;
+  font-weight: 600;
   color: var(--secondary-text);
   display: block;
   margin-bottom: 0.3rem;
@@ -26,9 +26,8 @@
   border: 2px solid var(--border-color);
   background: var(--primary-bg);
   color: var(--primary-text);
-  /* Selected patient name — input size, a little bolder as the chosen value. */
-  font-size: var(--fs-input);
-  font-weight: var(--fw-title);
+  font-size: 18px;
+  font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
   box-shadow: var(--shadow-sm);
@@ -112,8 +111,17 @@
   border: none;
   background: transparent;
   outline: none;
-  /* Input size (16px also stops iOS Safari zooming in on focus). */
-  font-size: var(--fs-input);
+  color: var(--primary-text);
+  font-size: 0.9rem;
+}
+
+/* iOS Safari zooms the page in when an input under 16px is focused (this one
+   autofocuses as soon as the list opens), and stays zoomed after a patient is
+   picked. 16px on touch devices prevents that without changing the desktop look. */
+@media (hover: none) and (pointer: coarse) {
+  .searchBox input {
+    font-size: 16px;
+  }
 }
 
 .areaDropdown {
@@ -132,7 +140,7 @@
   padding: 0.5rem 0.75rem;
   background: var(--secondary-bg);
   color: var(--primary-text);
-  font-size: var(--fs-input);
+  font-size: 0.9rem;
   cursor: pointer;
 }
 
@@ -183,7 +191,7 @@
   border: none;
   background: transparent;
   color: var(--primary-text);
-  font-size: var(--fs-input);
+  font-size: 0.85rem;
   cursor: pointer;
 }
 
@@ -198,7 +206,7 @@
 }
 
 .voiceStatus {
-  font-size: var(--fs-helper);
+  font-size: 0.82rem;
   color: var(--secondary-text);
 }
 
@@ -218,7 +226,7 @@
   text-align: center;
   color: var(--secondary-text);
   padding: 1.5rem 0;
-  font-size: var(--fs-label);
+  font-size: 0.9rem;
 }
 
 .item {
@@ -251,7 +259,7 @@
 }
 
 .itemMeta {
-  font-size: var(--fs-helper);
+  font-size: 0.8rem;
   color: var(--secondary-text);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -272,8 +280,7 @@
   border: 1px solid var(--border-color);
   background: var(--secondary-bg);
   color: var(--secondary-text);
-  font-size: var(--fs-button);
-  font-weight: var(--fw-button);
+  font-size: 0.85rem;
   cursor: pointer;
 }
 

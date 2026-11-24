@@ -762,8 +762,8 @@ export default function ReportPage() {
             <FileText size={22} />
           </div>
           <div>
-            <h1 className="page-title mb-0">報告書</h1>
-            <p className="page-subtitle mb-0">利用者ごとの月次状況記録表兼報告書</p>
+            <h1 className="h4 mb-0 fw-bold">報告書</h1>
+            <p className="text-muted mb-0 small">利用者ごとの月次状況記録表兼報告書</p>
           </div>
         </div>
 
@@ -1149,7 +1149,7 @@ export default function ReportPage() {
         )}
       </Container>
 
-      <Modal show={showGallery} onHide={() => setShowGallery(false)} centered size="xl" scrollable fullscreen="sm-down">
+      <Modal show={showGallery} onHide={() => setShowGallery(false)} centered size="xl" scrollable>
         <Modal.Header closeButton>
           <Modal.Title>
             写真一覧 {report?.patient?.name ? `｜${report.patient.name}` : ""}
