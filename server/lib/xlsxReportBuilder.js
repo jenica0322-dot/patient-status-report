@@ -7,7 +7,6 @@ const {
   PATIENT_SELECT_FIELD_LABEL,
   COLORS,
   GROUP_COLOR: GROUP_COLOR_RGB,
-  FIELD_GROUP,
   TALLY_GROUPS,
   WEEKDAY_JA,
   CIRCLED_NUMBERS,
@@ -48,7 +47,7 @@ function styleCell(cell, { bold, size, color, fill, align, valign, wrap, border 
 // on-screen report: うけとり's after うけとり, and the 食べ残し/体調 group comments
 // (stored on the group's anchor field) after the group's last column.
 // (Category comment columns follow マスター — see categoryCommentColumns.)
-const { categoryCommentColumns } = require("./reportPlan");
+const { categoryCommentColumns, columnGroups } = require("./reportPlan");
 
 // Rough one-line width of `text` in ems: full-width (CJK) characters ~1em,
 // ASCII/half-width ones ~0.55em.
@@ -76,8 +75,10 @@ function buildDailyColumns(dfByKey, orderedDailyBody, dailyFields, targetRows) {
     { label: `${uketoriLabel}コメント`, kind: "comment", commentKey: "uketori", fill: GRAY },
   ];
   const commentAfter = categoryCommentColumns(dailyFields, targetRows || [], orderedDailyBody);
+  // Color group per column (a マスター-added column takes its category's).
+  const groups = columnGroups(dailyFields, targetRows || []);
   orderedDailyBody.forEach((f) => {
-    cols.push({ label: f.field_label, kind: f.field_type === "checkbox" ? "checkbox" : "text", field: f });
+    cols.push({ label: f.field_label, kind: f.field_type === "checkbox" ? "checkbox" : "text", field: f, group: groups[f.field_key] });
     const gc = commentAfter.get(f.field_key);
     if (gc) cols.push({ label: gc.label, kind: "comment", commentKey: gc.commentKey, fill: GROUP_COLOR[gc.group] || WHITE });
   });
@@ -131,6 +132,8 @@ async function buildReportWorkbook({ data, dailyFields, monthlyFields, layout, t
         f.field_key !== "uketori" &&
         // メモ isn't shown in the report grid (its data stays in the record).
         f.field_key !== "memo" &&
+        // 問題なし has no column of its own (its record value stays; 完食 is ticked with it).
+        f.field_key !== "mondai_nashi" &&
         // Answer columns of categories added in マスター (e.g. 特記) stay off the report.
         f.field_type !== "preset" &&
         f.field_label !== PATIENT_SELECT_FIELD_LABEL
@@ -263,7 +266,7 @@ async function buildReportWorkbook({ data, dailyFields, monthlyFields, layout, t
         cell.value = textWithComment(fv);
       }
       styleCell(cell, {
-        fill: FIELD_GROUP[f.field_key] ? GROUP_COLOR[FIELD_GROUP[f.field_key]] : WHITE,
+        fill: c.group ? GROUP_COLOR[c.group] : WHITE,
         size: 9,
         align: c.kind === "checkbox" ? "center" : "left",
         wrap: false,

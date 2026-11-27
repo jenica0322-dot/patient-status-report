@@ -89,8 +89,14 @@ export default function CategoryEditor({
   const [options, setOptions] = useState<CategoryOption[]>(() =>
     (initial?.options ?? []).map((o) => ({ ...o, sub: o.sub ? [...o.sub] : undefined }))
   );
-  // 報告書の列名 of the text column (text display).
-  const [reportName, setReportName] = useState(initial?.display === "text" ? colLabel(initial.column) : "");
+  // The category's 報告書の列名 — every category has its own, テキスト or
+  // チェック: the name the voice announces / recognizes for it and that names
+  // its 〜コメント column and tally in the 報告書. (テキスト: also its answer
+  // column's header.) Starts from what's in use now, so nothing changes until
+  // it's edited.
+  const [reportName, setReportName] = useState(
+    initial ? (initial.display === "text" ? colLabel(initial.column) : initial.reportColumnName ?? initial.spokenLabel) : ""
+  );
   // 列名 edits for the checkbox columns options tick (checkbox display).
   const [colNames, setColNames] = useState<Record<string, string>>({});
   const [fieldKey, setFieldKey] = useState("");
@@ -170,6 +176,13 @@ export default function CategoryEditor({
 
   const validate = (): string | null => {
     if (!label.trim()) return "ラベルを入力してください";
+    // Each category needs its own 報告書の列名 (it's how the voice tells them apart).
+    const name = reportName.trim();
+    if (!name) return "報告書の列名を入力してください";
+    const clash = allCategoryConfigs(dailyFields, groupRows).find(
+      (c) => c.field_key !== initial?.field_key && c.spokenLabel === name
+    );
+    if (clash) return `報告書の列名「${name}」は「${clash.label}」と同じです（項目ごとに別の名前にしてください）`;
     if (isNew && display === "text") {
       const key = fieldKey.trim();
       if (key) {
@@ -180,18 +193,14 @@ export default function CategoryEditor({
     }
     if (!options.length) return "選択肢を1つ以上登録してください";
     const names = new Set<string>();
-    const keys = new Set<string>();
     for (const o of options) {
       const l = o.label.trim();
       if (!l) return "選択肢名が空欄です";
       if (names.has(l)) return `選択肢「${l}」が重複しています`;
       names.add(l);
-      if (display === "checkbox") {
-        if (!o.key) return `「${l}」の保存先の列を選択してください`;
-        if (o.key !== NEW_COLUMN && keys.has(o.key)) return `保存先の列が重複しています（「${l}」）`;
-        keys.add(o.key);
-      }
-      if (o.sub?.length && !canHaveSub(o)) return `「${l}」の追加選択肢はテキスト列にのみ設定できます`;
+      // Several options may save to the same 報告書 column.
+      if (display === "checkbox" && !o.key) return `「${l}」の保存先の列を選択してください`;
+      if (o.sub?.length && !canHaveSub(o)) return `「${l}」のサブ項目はテキスト列にのみ設定できます`;
       for (const s of o.sub ?? []) {
         if (names.has(s)) return `選択肢「${s}」が重複しています`;
         names.add(s);
@@ -280,7 +289,19 @@ export default function CategoryEditor({
         Math.max(0, ...allCategoryConfigs(dailyFields, groupRows).map((c) => c.order)) + 1;
       await saveStatusField(
         categoryRow(
-          { field_key: catKey, label: label.trim(), display, multiple, column, comment, commentKey, options: opts },
+          {
+            field_key: catKey,
+            label: label.trim(),
+            display,
+            multiple,
+            column,
+            comment,
+            commentKey,
+            options: opts,
+            // チェック display stores it on the category (テキスト: saved as
+            // the answer column's name above).
+            reportColumnName: display === "checkbox" ? reportName.trim() : undefined,
+          },
           order
         )
       );
@@ -395,12 +416,14 @@ export default function CategoryEditor({
         </Form.Text>
       </Form.Group>
 
-      {display === "text" && (
-        <Form.Group className="mb-3">
-          <Form.Label>報告書の列名</Form.Label>
-          <Form.Control value={reportName} onChange={(e) => setReportName(e.target.value)} placeholder="空欄ならラベルと同じ" />
-        </Form.Group>
-      )}
+      <Form.Group className="mb-3">
+        <Form.Label>報告書の列名</Form.Label>
+        <Form.Control value={reportName} onChange={(e) => setReportName(e.target.value)} placeholder="例：体調" />
+        <Form.Text muted>
+          音声で読み上げ・認識する名前です（項目ごとに別の名前）
+          {display === "text" ? "。報告書ではこの項目の列の見出しにもなります" : ""}
+        </Form.Text>
+      </Form.Group>
 
       <Form.Group className="mb-3">
         <Form.Label>コメント入力</Form.Label>
@@ -474,7 +497,7 @@ export default function CategoryEditor({
 
                 {existingCol && (
                   <InputGroup size="sm" className="mt-2">
-                    <InputGroup.Text>報告書の列名</InputGroup.Text>
+                    <InputGroup.Text>この選択肢の列名</InputGroup.Text>
                     <Form.Control
                       value={colNames[existingCol] ?? colLabel(existingCol)}
                       onChange={(e) => setColNames((m) => ({ ...m, [existingCol]: e.target.value }))}
@@ -484,7 +507,7 @@ export default function CategoryEditor({
 
                 {canHaveSub(o) && (
                   <div className="mt-2 ps-2">
-                    <div className="small text-muted mb-1">追加選択肢（任意・選んだ名前が保存されます）</div>
+                    <div className="small text-muted mb-1">サブ項目（任意・選んだ名前が保存されます）</div>
                     {!!o.sub?.length && (
                       <div className="d-flex flex-wrap gap-2 mb-2">
                         {o.sub.map((s) => (
@@ -493,7 +516,7 @@ export default function CategoryEditor({
                             <button
                               type="button"
                               className="btn-close btn-close-white"
-                              style={{ fontSize: "0.55rem" }}
+                              style={{ fontSize: "var(--fs-xs)" }}
                               aria-label="削除"
                               onClick={() => removeSub(i, s)}
                             />
@@ -503,7 +526,7 @@ export default function CategoryEditor({
                     )}
                     <InputGroup size="sm">
                       <Form.Control
-                        placeholder="追加選択肢（「、」区切りで複数可）"
+                        placeholder="サブ項目を追加"
                         value={newSub[i] || ""}
                         onChange={(e) => setNewSub((m) => ({ ...m, [i]: e.target.value }))}
                         onKeyDown={enterAdds(() => addSub(i))}
@@ -520,7 +543,7 @@ export default function CategoryEditor({
 
           <InputGroup>
             <Form.Control
-              placeholder="選択肢を追加（「、」区切りで複数可）"
+              placeholder="メイン項目を追加"
               value={newOption}
               onChange={(e) => setNewOption(e.target.value)}
               onKeyDown={enterAdds(addOptionRows)}
@@ -534,16 +557,16 @@ export default function CategoryEditor({
 
       <div className="d-flex gap-2">
         {deletable && (
-          <Button variant="outline-danger" size="lg" onClick={handleDelete} disabled={saving} aria-label="削除" style={{ fontSize: 18 }}>
+          <Button variant="outline-danger" size="lg" onClick={handleDelete} disabled={saving} aria-label="削除" style={{ fontSize: "var(--fs-md)" }}>
             <Trash />
           </Button>
         )}
         {onCancel && (
-          <Button variant="outline-secondary" size="lg" onClick={onCancel} disabled={saving} style={{ fontSize: 18 }}>
+          <Button variant="outline-secondary" size="lg" onClick={onCancel} disabled={saving} style={{ fontSize: "var(--fs-md)" }}>
             キャンセル
           </Button>
         )}
-        <Button variant="primary" size="lg" className="flex-grow-1" onClick={handleSave} disabled={saving} style={{ fontSize: 20 }}>
+        <Button variant="primary" size="lg" className="flex-grow-1" onClick={handleSave} disabled={saving} style={{ fontSize: "var(--fs-md)" }}>
           {saving ? (
             <span key="saving">
               <Spinner animation="border" size="sm" className="me-2" />

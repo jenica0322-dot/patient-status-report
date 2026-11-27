@@ -103,7 +103,7 @@
 
 .buttonText {
   margin-left: 0.9rem;
-  font-size: 16px;
+  font-size: var(--fs-base);
   opacity: 1;
   transition: all 0.2s ease-in-out;
 }
@@ -143,7 +143,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.5rem;
+  font-size: var(--fs-xl);
   font-weight: 700;
   margin: 0 auto 0.5rem;
   box-shadow: var(--shadow-sm);
@@ -153,7 +153,7 @@
 .sidebarCollapsed .avatar {
   width: 40px;
   height: 40px;
-  font-size: 1.2rem;
+  font-size: var(--fs-lg);
 }
 
 .employeeName {
@@ -162,7 +162,7 @@
   word-wrap: break-word;
   opacity: 1;
   transition: all 0.2s;
-  font-size: 16px;
+  font-size: var(--fs-base);
   color: var(--primary-text, #1e293b);
 }
 
@@ -182,7 +182,7 @@
   background-color: var(--brand-50, #f0fdfa);
   color: var(--brand-800, #115e59);
   border: 1px solid var(--brand-100, #ccfbf1);
-  font-size: 16px;
+  font-size: var(--fs-base);
 }
 
 .toggleButton {
@@ -217,22 +217,22 @@
 /* Phone menu (offcanvas) only — larger text and icons for easier reading
    and tapping. The desktop sidebar keeps its own sizes. */
 .offcanvas :global(.offcanvas-title) {
-  font-size: 22px;
+  font-size: var(--fs-lg);
   font-weight: 700;
 }
 
 .offcanvas .avatar {
   width: 64px;
   height: 64px;
-  font-size: 1.75rem;
+  font-size: var(--fs-xl);
 }
 
 .offcanvas .employeeName {
-  font-size: 20px;
+  font-size: var(--fs-md);
 }
 
 .offcanvas .patientCard {
-  font-size: 18px;
+  font-size: var(--fs-md);
   padding: 0.75rem;
 }
 
@@ -241,7 +241,7 @@
 }
 
 .offcanvas .buttonText {
-  font-size: 20px;
+  font-size: var(--fs-md);
 }
 
 .offcanvas .sidebarButton svg {

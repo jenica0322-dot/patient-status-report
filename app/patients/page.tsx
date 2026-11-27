@@ -137,7 +137,7 @@ export default function PatientsPage() {
             <PersonLinesFill size={22} />
           </div>
           <div>
-            <h1 className="h4 mb-0 fw-bold">利用者選択</h1>
+            <h1 className="h1 mb-0">利用者選択</h1>
             <p className="text-muted mb-0 small">
               顧客マスタから選択（patient_id = pat_id）。{total > 0 ? `${total} 件` : ""}
             </p>

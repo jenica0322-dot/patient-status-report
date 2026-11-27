@@ -3,6 +3,8 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import ReportLayoutSettings from "./ReportLayoutSettings";
+import masterStyles from "@/app/styles/MasterSettings.module.css";
+import PatientQRCodes from "./PatientQRCodes";
 import CategoryEditor, { type CategoryEditorTarget } from "./CategoryEditor";
 import { addOptions, isAddEnter } from "./optionInput";
 import {
@@ -83,6 +85,8 @@ export default function RegisterFields() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [layoutTab, setLayoutTab] = useState(false);
+  // 利用者QRコード tab (PatientQRCodes).
+  const [qrTab, setQrTab] = useState(false);
   const [groupRows, setGroupRows] = useState<Field[]>([]);
   // Category being edited (its field_key), or null → the editor adds a new one.
   const [editingGroup, setEditingGroup] = useState<string | null>(null);
@@ -275,7 +279,7 @@ export default function RegisterFields() {
   };
 
   return (
-    <Container fluid className="py-2">
+    <Container fluid className={`py-2 ${masterStyles.masterPage}`}>
       <div className="d-flex align-items-center mb-3">
         <div
           className="d-flex align-items-center justify-content-center me-3 flex-shrink-0"
@@ -290,13 +294,13 @@ export default function RegisterFields() {
           <FileText size={22} />
         </div>
         <div>
-          <h1 className="h4 mb-0 fw-bold">フィールド登録・管理</h1>
+          <h1 className="h1 mb-0">フィールド登録・管理</h1>
           <p className="text-muted mb-0 small">記録項目のマスターデータを管理します</p>
         </div>
       </div>
 
-      <Row className="justify-content-center">
-        <Col lg={11} xl={10}>
+      <Row>
+        <Col>
           <Card>
             <Card.Body>
               {message && (
@@ -311,12 +315,13 @@ export default function RegisterFields() {
                   {SCREENS.map((s) => (
                     <Button
                       key={s.key}
-                      variant={!layoutTab && form.screen_key === s.key ? "primary" : "outline-primary"}
+                      variant={!layoutTab && !qrTab && form.screen_key === s.key ? "primary" : "outline-primary"}
                       onClick={() => {
                         if (!leaveLayoutTab()) return;
+                        setQrTab(false);
                         if (form.screen_key !== s.key) handleScreenChange(s.key);
                       }}
-                      style={{ fontSize: 18 }}
+                      style={{ fontSize: "var(--fs-md)" }}
                     >
                       {s.label}
                     </Button>
@@ -326,22 +331,37 @@ export default function RegisterFields() {
                     variant={layoutTab ? "primary" : "outline-primary"}
                     onClick={() => {
                       setMessage(null);
+                      setQrTab(false);
                       setLayoutTab(true);
                     }}
-                    style={{ fontSize: 18 }}
+                    style={{ fontSize: "var(--fs-md)" }}
                   >
                     報告書レイアウト
+                  </Button>
+                  <Button
+                    key="patient_qr"
+                    variant={qrTab ? "primary" : "outline-primary"}
+                    onClick={() => {
+                      if (!leaveLayoutTab()) return;
+                      setMessage(null);
+                      setQrTab(true);
+                    }}
+                    style={{ fontSize: "var(--fs-md)" }}
+                  >
+                    利用者QRコード
                   </Button>
                 </div>
               </Form.Group>
 
-              {layoutTab ? (
+              {qrTab ? (
+                <PatientQRCodes />
+              ) : layoutTab ? (
                 <ReportLayoutSettings onDirtyChange={(d) => (layoutDirtyRef.current = d)} />
               ) : (
               <Row>
                 <Col md={7}>
                   <Card className="mb-3 mb-md-0">
-                    <Card.Header style={{ fontSize: 18 }}>
+                    <Card.Header>
                       <Database className="me-2" />
                       フィールド情報
                       {isDaily && (
@@ -452,7 +472,7 @@ export default function RegisterFields() {
                                         <button
                                           type="button"
                                           className="btn-close btn-close-white"
-                                          style={{ fontSize: "0.55rem" }}
+                                          style={{ fontSize: "var(--fs-xs)" }}
                                           aria-label="削除"
                                           onClick={() => removePhrase(p)}
                                         />
@@ -487,7 +507,7 @@ export default function RegisterFields() {
                             variant="primary"
                             size="lg"
                             onClick={handleSave}
-                            style={{ fontSize: 20 }}
+                            style={{ fontSize: "var(--fs-md)" }}
                             disabled={loading}
                           >
                             {loading ? (
@@ -511,7 +531,7 @@ export default function RegisterFields() {
 
                 <Col md={5}>
                   <Card>
-                    <Card.Header style={{ fontSize: 18 }}>
+                    <Card.Header>
                       <List className="me-2" />
                       登録済みフィールド ({isDaily ? dailyEntries.length : fields.length})
                     </Card.Header>

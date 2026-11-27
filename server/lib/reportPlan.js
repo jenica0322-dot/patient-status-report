@@ -24,8 +24,8 @@ const BUILTIN = [
     options: [{ label: "声かけ", key: "koekake" }, { label: "新聞/郵便", key: "shinbun_yubin" }, { label: "玄関安全", key: "genkan_anzen" }, { label: "支援他", key: "shien_ta" }] },
 ];
 
-// Columns the daily grid never shows (曜 has its own fixed column; メモ stays in the record).
-const HIDDEN_COLUMNS = new Set(["youbi", "memo"]);
+// Columns the daily grid never shows (曜 has its own fixed column; メモ and 問題なし stay in the record).
+const HIDDEN_COLUMNS = new Set(["youbi", "memo", "mondai_nashi"]);
 
 function parseJson(v, fallback) {
   if (v == null) return fallback;
@@ -70,6 +70,9 @@ function readCategory(key, row, dailyFields) {
   return {
     key,
     label,
+    // The category's name in the 報告書 (〜コメント column, tally group). Not
+    // the 報告書の列名 set in マスター for チェック categories — that one is
+    // used only by Status Input's voice-over.
     spoken: def
       ? def.spoken
       : display === "text" && columnRow && columnRow.field_label
@@ -214,6 +217,23 @@ async function loadPlanFields(pool) {
 }
 
 /**
+ * Column key -> color group (食事/体調/支援/連絡) for the daily grid. The fixed
+ * FIELD_GROUP map, plus: a column added in マスター (e.g. a category's 「なし」)
+ * takes the group of the other columns in its category, so it's colored with
+ * them instead of white.
+ */
+function columnGroups(dailyFields, targetRows) {
+  const out = { ...FIELD_GROUP };
+  for (const c of readCategories(dailyFields, targetRows)) {
+    const keys = c.display === "text" ? [c.column] : c.options.map((o) => o.key).filter(Boolean);
+    const group = keys.map((k) => FIELD_GROUP[k]).find(Boolean);
+    if (!group) continue;
+    for (const k of keys) if (!out[k]) out[k] = group;
+  }
+  return out;
+}
+
+/**
  * The daily grid's category comment columns, as configured in マスター: each
  * category with コメント入力 on gets a "<名前>コメント" column right after its
  * last shown column, reading the comment from the field Status Input stores it
@@ -223,6 +243,7 @@ async function loadPlanFields(pool) {
 function categoryCommentColumns(dailyFields, targetRows, shownColumns) {
   const pos = new Map(shownColumns.map((f, i) => [f.field_key, i]));
   const exists = new Set(dailyFields.map((f) => f.field_key));
+  const groups = columnGroups(dailyFields, targetRows);
   const out = new Map();
   for (const c of readCategories(dailyFields, targetRows)) {
     if (!c.comment || !c.commentKey || !exists.has(c.commentKey)) continue;
@@ -231,9 +252,9 @@ function categoryCommentColumns(dailyFields, targetRows, shownColumns) {
     if (!shown.length) continue;
     const last = shown.reduce((a, b) => (pos.get(b) > pos.get(a) ? b : a));
     if (out.has(last)) continue;
-    out.set(last, { commentKey: c.commentKey, label: `${c.spoken}コメント`, group: FIELD_GROUP[last] });
+    out.set(last, { commentKey: c.commentKey, label: `${c.spoken}コメント`, group: groups[last] });
   }
   return out;
 }
 
-module.exports = { buildReportPlan, countTallies, loadPlanFields, readCategories, categoryCommentColumns };
+module.exports = { buildReportPlan, countTallies, loadPlanFields, readCategories, categoryCommentColumns, columnGroups };

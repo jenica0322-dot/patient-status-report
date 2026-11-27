@@ -9,11 +9,51 @@ body {
 body {
   color: var(--primary-text);
   background: var(--app-bg);
-  font-family: var(--font-geist-sans), "Hiragino Sans", "Yu Gothic", -apple-system,
-    BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-family: var(--font-sans);
+  font-size: var(--fs-base);
+  font-weight: var(--fw-regular);
+  line-height: var(--lh-base);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   letter-spacing: 0.01em;
+  /* Japanese line breaking: don't start a line with 。、）etc. */
+  line-break: strict;
+}
+
+/* ---------- Typography system ----------
+   One type scale for the whole app. Every label, button, input, heading and
+   description uses one of these steps — nothing sets its own pixel size.
+     --fs-xs    12px  captions, badges, fine print
+     --fs-sm    14px  secondary text, descriptions, hints, table headers
+     --fs-base  16px  body, labels, inputs, buttons (16px also keeps iOS
+                      from zooming into a focused input)
+     --fs-md    18px  prominent buttons, picked values, card headers
+     --fs-lg    20px  section headings
+     --fs-xl    24px  page titles
+   The larger steps ease down a little on phones (same proportions); xs–base
+   stay fixed so small text never gets too small to read.
+   Two things are sized by their layout instead, on purpose: the big Status
+   Input choice tiles (they scale with the room available) and the dense
+   報告書 grid (mirrors the printed form). */
+:root {
+  --font-sans: var(--font-geist-sans), "Hiragino Sans", "Hiragino Kaku Gothic ProN",
+    "Noto Sans JP", "Yu Gothic UI", "Yu Gothic", Meiryo, system-ui, -apple-system,
+    "Segoe UI", Roboto, sans-serif;
+
+  --fs-xs: 12px;
+  --fs-sm: 14px;
+  --fs-base: 16px;
+  --fs-md: clamp(16px, 0.95rem + 0.25vw, 18px);
+  --fs-lg: clamp(18px, 1.05rem + 0.35vw, 20px);
+  --fs-xl: clamp(20px, 1.15rem + 0.6vw, 24px);
+
+  --fw-regular: 400;
+  --fw-medium: 500;
+  --fw-semibold: 600;
+  --fw-bold: 700;
+
+  --lh-tight: 1.25;
+  --lh-base: 1.6;
 }
 
 :root {
@@ -74,7 +114,9 @@ body {
   /* Bootstrap 5.3 theme overrides */
   --bs-primary: var(--brand-600);
   --bs-primary-rgb: 13, 148, 136;
-  --bs-body-font-family: var(--font-geist-sans), "Hiragino Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --bs-body-font-family: var(--font-sans);
+  --bs-body-font-size: var(--fs-base);
+  --bs-body-line-height: var(--lh-base);
   --bs-body-bg: var(--app-bg);
   --bs-body-color: var(--primary-text);
   --bs-border-radius: var(--radius-md);
@@ -96,6 +138,58 @@ body {
 a {
   color: inherit;
   text-decoration: none;
+}
+
+/* Headings, form controls and Bootstrap pieces follow the scale too. */
+h1, .h1 { font-size: var(--fs-xl); }
+h2, .h2 { font-size: var(--fs-lg); }
+h3, .h3, h4, .h4 { font-size: var(--fs-md); }
+h5, .h5, h6, .h6 { font-size: var(--fs-base); }
+h1, h2, h3, h4, h5, h6,
+.h1, .h2, .h3, .h4, .h5, .h6 {
+  font-weight: var(--fw-bold);
+  line-height: var(--lh-tight);
+}
+
+small, .small, .form-text {
+  font-size: var(--fs-sm);
+}
+
+button, input, select, textarea {
+  font-family: inherit;
+}
+
+/* Buttons and inputs: all at the base size (Bootstrap's -sm / -lg variants
+   change only their padding, not the text, so text is the same everywhere). */
+.btn,
+.btn-sm,
+.btn-lg,
+.form-control,
+.form-control-sm,
+.form-control-lg,
+.form-select,
+.form-select-sm,
+.input-group-text,
+.form-check-label,
+.dropdown-item,
+.nav-link,
+.list-group-item,
+.alert,
+.card-body,
+.modal-body,
+.offcanvas-body,
+.table {
+  font-size: var(--fs-base);
+}
+
+.card-header,
+.modal-title,
+.offcanvas-title {
+  font-size: var(--fs-md);
+}
+
+.badge {
+  font-size: var(--fs-xs);
 }
 
 /* Lets a flex child shrink below its content width, so long text inside it can
@@ -245,8 +339,8 @@ a {
   box-shadow: 0 0 0 0.2rem rgba(13, 148, 136, 0.15);
 }
 .form-label {
-  font-weight: 600;
-  font-size: 0.875rem;
+  font-weight: var(--fw-semibold);
+  font-size: var(--fs-sm);
   color: var(--secondary-text);
 }
 
@@ -287,10 +381,10 @@ thead.table-light,
 .table thead {
   --bs-table-bg: var(--secondary-bg);
   color: var(--secondary-text);
-  font-size: 0.8rem;
+  font-size: var(--fs-sm);
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  font-weight: 700;
+  font-weight: var(--fw-bold);
 }
 
 .badge {

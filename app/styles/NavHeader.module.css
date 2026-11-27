@@ -40,7 +40,7 @@
 }
 
 .headerTitle {
-  font-size: 16px;
+  font-size: var(--fs-md);
   font-weight: 700;
   color: var(--accent-text, #0f172a);
   letter-spacing: -0.01em;
@@ -51,7 +51,7 @@
   align-items: center;
   color: var(--brand-700, #0f766e);
   background: var(--brand-100, #ccfbf1);
-  font-size: 16px;
+  font-size: var(--fs-base);
   font-weight: 700;
   padding: 0.25rem 0.65rem;
   border-radius: 999px;
@@ -60,7 +60,7 @@
 
 .welcomeText {
   color: var(--secondary-text, #64748b);
-  font-size: 16px;
+  font-size: var(--fs-sm);
   font-weight: 500;
 }
 
@@ -116,6 +116,28 @@
     margin-left: 0;
     max-width: 100%;
   }
+
+  /* One compact row on phones — menu, icon, and the selected patient — so
+     the screens below get the height. The title shows only while no patient
+     is selected (it's in the browser tab anyway), and the 「ようこそ」 pill is
+     dropped: the logged-in user is shown at the top of the menu. */
+  .appHeader {
+    min-height: 56px;
+    padding-top: 0.4rem;
+    padding-bottom: 0.4rem;
+  }
+
+  .appHeader :global(.container-fluid) {
+    flex-wrap: nowrap;
+  }
+
+  .headerBrand:has(.patientBadge) .headerTitle {
+    display: none;
+  }
+
+  .welcomeContainer {
+    display: none !important;
+  }
 }
 
 @media (max-width: 480px) {
@@ -129,6 +151,6 @@
   }
 
   .welcomeText {
-    font-size: 16px;
+    font-size: var(--fs-sm);
   }
 }
