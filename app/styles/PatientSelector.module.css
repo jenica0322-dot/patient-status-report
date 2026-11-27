@@ -3,11 +3,23 @@
 .wrapper {
   position: relative;
   width: 100%;
+  /* Status Input gives the 対象利用者 box a fixed share of the screen. The
+     open list shrinks to fit inside it (its rows scroll) instead of spilling
+     out over the コメント box and the mic below. */
+  flex: 0 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.wrapper > .label,
+.wrapper > .trigger {
+  flex-shrink: 0;
 }
 
 .label {
-  /* "対象利用者" label and the selected patient name (.trigger) are both 18px. */
-  font-size: 18px;
+  /* Field label size (like every form label); the picked patient name (.trigger) is one step up. */
+  font-size: var(--fs-sm);
   font-weight: 600;
   color: var(--secondary-text);
   display: block;
@@ -26,7 +38,7 @@
   border: 2px solid var(--border-color);
   background: var(--primary-bg);
   color: var(--primary-text);
-  font-size: 18px;
+  font-size: var(--fs-md);
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -79,6 +91,8 @@
   /* Never taller than the screen can show alongside the header. */
   max-height: min(420px, 60vh);
   max-height: min(420px, 60dvh);
+  flex: 0 1 auto;
+  min-height: 0;
 }
 
 @media (max-width: 480px) {
@@ -112,7 +126,7 @@
   background: transparent;
   outline: none;
   color: var(--primary-text);
-  font-size: 0.9rem;
+  font-size: var(--fs-base);
 }
 
 /* iOS Safari zooms the page in when an input under 16px is focused (this one
@@ -120,7 +134,7 @@
    picked. 16px on touch devices prevents that without changing the desktop look. */
 @media (hover: none) and (pointer: coarse) {
   .searchBox input {
-    font-size: 16px;
+    font-size: var(--fs-base);
   }
 }
 
@@ -140,7 +154,7 @@
   padding: 0.5rem 0.75rem;
   background: var(--secondary-bg);
   color: var(--primary-text);
-  font-size: 0.9rem;
+  font-size: var(--fs-base);
   cursor: pointer;
 }
 
@@ -191,7 +205,7 @@
   border: none;
   background: transparent;
   color: var(--primary-text);
-  font-size: 0.85rem;
+  font-size: var(--fs-base);
   cursor: pointer;
 }
 
@@ -206,7 +220,7 @@
 }
 
 .voiceStatus {
-  font-size: 0.82rem;
+  font-size: var(--fs-sm);
   color: var(--secondary-text);
 }
 
@@ -226,7 +240,7 @@
   text-align: center;
   color: var(--secondary-text);
   padding: 1.5rem 0;
-  font-size: 0.9rem;
+  font-size: var(--fs-sm);
 }
 
 .item {
@@ -259,7 +273,7 @@
 }
 
 .itemMeta {
-  font-size: 0.8rem;
+  font-size: var(--fs-sm);
   color: var(--secondary-text);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -280,7 +294,7 @@
   border: 1px solid var(--border-color);
   background: var(--secondary-bg);
   color: var(--secondary-text);
-  font-size: 0.85rem;
+  font-size: var(--fs-sm);
   cursor: pointer;
 }
 
@@ -298,5 +312,13 @@
   .trigger {
     padding-top: 0.35rem;
     padding-bottom: 0.35rem;
+  }
+}
+
+/* Screens up to 900px tall: the 対象利用者 heading gives its line to the choices — the
+   picker itself shows the person icon and the patient's name. */
+@media (max-height: 900px) {
+  .label {
+    display: none;
   }
 }

@@ -32,14 +32,24 @@ type BaseProps = {
   onChange: (value: string) => void;
   className?: string;
   maxWidth?: number;
+  // Wrapper class (e.g. to let the box flex on a phone toolbar).
+  wrapperClassName?: string;
 };
 
-export function JaDateInput({ value, onChange, className, maxWidth = 210 }: BaseProps) {
+export function JaDateInput({
+  value,
+  onChange,
+  className,
+  maxWidth = 210,
+  wrapperClassName,
+  // Without the year (「11月27日(金)」) — for narrow phone toolbars.
+  short = false,
+}: BaseProps & { short?: boolean }) {
   return (
-    <div style={{ maxWidth }}>
+    <div style={{ maxWidth }} className={wrapperClassName}>
       <DatePicker
         locale="ja"
-        dateFormat="yyyy年MM月dd日(EEEEE)"
+        dateFormat={short ? "M月d日(EEEEE)" : "yyyy年MM月dd日(EEEEE)"}
         selected={parseYmd(value)}
         onChange={(date: Date | null) => date && onChange(formatYmd(date))}
         className={className}

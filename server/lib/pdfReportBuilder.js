@@ -20,7 +20,6 @@ const {
   PATIENT_SELECT_FIELD_LABEL,
   COLORS,
   GROUP_COLOR,
-  FIELD_GROUP,
   TALLY_GROUPS,
   WEEKDAY_JA,
   CIRCLED_NUMBERS,
@@ -98,7 +97,7 @@ const MONTHLY_COL_WIDTHS = new Array(TOTAL_COLS).fill(
 // to, as in the on-screen report: うけとり's after うけとり, and the 食べ残し/体調
 // group comments (stored on the group's anchor field) after the group's last column.
 // (Category comment columns follow マスター — see categoryCommentColumns.)
-const { categoryCommentColumns } = require("./reportPlan");
+const { categoryCommentColumns, columnGroups } = require("./reportPlan");
 const DAILY_HEADER_FONT_SIZE = 7.5;
 const DAY_ROW_FONT_SIZE = 7.5;
 // Minimum content widths, in ems of the row font, for columns whose values can be
@@ -127,8 +126,10 @@ function buildDailyColumns(dfByKey, orderedDailyBody, dailyFields, targetRows) {
     { label: `${uketoriLabel}コメント`, kind: "comment", commentKey: "uketori", fill: COLORS.GRAY },
   ];
   const commentAfter = categoryCommentColumns(dailyFields, targetRows || [], orderedDailyBody);
+  // Color group per column (a マスター-added column takes its category's).
+  const groups = columnGroups(dailyFields, targetRows || []);
   orderedDailyBody.forEach((f) => {
-    cols.push({ label: f.field_label, kind: f.field_type === "checkbox" ? "checkbox" : "text", field: f });
+    cols.push({ label: f.field_label, kind: f.field_type === "checkbox" ? "checkbox" : "text", field: f, group: groups[f.field_key] });
     const gc = commentAfter.get(f.field_key);
     if (gc) cols.push({ label: gc.label, kind: "comment", commentKey: gc.commentKey, fill: GROUP_COLOR[gc.group] || COLORS.WHITE });
   });
@@ -262,6 +263,8 @@ function buildDailyGridTable({ data, dailyFields, monthlyFields, targetRows }) {
         f.field_key !== "uketori" &&
         // メモ isn't shown in the report grid (its data stays in the record).
         f.field_key !== "memo" &&
+        // 問題なし has no column of its own (its record value stays; 完食 is ticked with it).
+        f.field_key !== "mondai_nashi" &&
         // Answer columns of categories added in マスター (e.g. 特記) stay off the report.
         f.field_type !== "preset" &&
         f.field_label !== PATIENT_SELECT_FIELD_LABEL
@@ -388,7 +391,7 @@ function buildDailyGridTable({ data, dailyFields, monthlyFields, targetRows }) {
           : ""
         : truncateForWidth(textWithComment(fv), width, DAY_ROW_FONT_SIZE);
       setCell(row, col, value, {
-        fill: FIELD_GROUP[f.field_key] ? GROUP_COLOR[FIELD_GROUP[f.field_key]] : COLORS.WHITE,
+        fill: c.group ? GROUP_COLOR[c.group] : COLORS.WHITE,
         size: DAY_ROW_FONT_SIZE,
         align: isCheckbox ? "center" : "left",
       });

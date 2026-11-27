@@ -34,7 +34,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
-  font-size: 17px;
+  font-size: var(--fs-md);
   font-weight: 700;
 }
 
@@ -65,7 +65,7 @@
 .numeral {
   flex: 0 0 auto;
   width: 2rem;
-  font-size: 1.3rem;
+  font-size: var(--fs-lg);
   font-weight: 700;
   text-align: center;
   color: #1f2d4a;
@@ -97,7 +97,7 @@
   border: 1px solid var(--border-color-strong, #b9c2cc);
   border-radius: 999px;
   background: #f8fafc;
-  font-size: 14px;
+  font-size: var(--fs-sm);
 }
 
 .chipLabel {
@@ -128,7 +128,7 @@
 }
 
 .chipRemove {
-  font-size: 16px;
+  font-size: var(--fs-base);
   color: #b42318;
 }
 
@@ -146,7 +146,7 @@
 
 .keyNote {
   margin-top: 0.4rem;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--secondary-text, #6c757d);
 }
 
@@ -162,10 +162,11 @@
 
 .preview {
   width: 100%;
-  min-width: 420px;
+  /* Fits any width (fixed layout + wrapping cells) — no sideways scroll on phones. */
+  min-width: 0;
   border-collapse: collapse;
   table-layout: fixed;
-  font-size: 11px;
+  font-size: var(--fs-xs);
 }
 
 .preview th,
@@ -196,5 +197,47 @@
 @media (max-width: 1199.98px) {
   .previewCard {
     position: static;
+  }
+}
+
+/* ---------- マスター page: compact spacing ----------
+   Less padding around and inside the cards and tighter gaps between form
+   fields, so more of the settings fit on screen. Text sizes are unchanged. */
+.masterPage > :global(.d-flex.mb-3) {
+  margin-bottom: 0.5rem !important;
+}
+
+.masterPage :global(.card-body) {
+  padding: 0.75rem;
+}
+
+.masterPage :global(.card-header) {
+  padding: 0.5rem 0.75rem;
+}
+
+.masterPage :global(.card .card .card-body) {
+  padding: 0.6rem 0.75rem;
+}
+
+.masterPage :global(.mb-3) {
+  margin-bottom: 0.65rem !important;
+}
+
+.masterPage :global(.form-label) {
+  margin-bottom: 0.25rem;
+}
+
+.masterPage :global(.form-text) {
+  margin-top: 0.15rem;
+}
+
+@media (max-width: 575.98px) {
+  .masterPage {
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  .masterPage :global(.card-body) {
+    padding: 0.6rem;
   }
 }

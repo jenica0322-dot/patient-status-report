@@ -11,11 +11,11 @@
   /* One shared size for every field label and the values/content next to
      them, kept as variables so every label and every piece of text reads
      at the same size instead of each section drifting to its own. */
-  --text-fs: 0.85rem;
-  --label-fs: var(--text-fs);
+  --text-fs: var(--fs-base);
+  --label-fs: var(--fs-sm);
   /* Dense list rows (候補 options, saved-values summary) read smaller than
      the rest of the page's text/labels. */
-  --list-fs: 0.72rem;
+  --list-fs: var(--fs-sm);
   /* Exactly one screen tall under the fixed header (minus <main>'s bottom
      padding), so the page never scrolls. The 対象利用者 panel flexes to take
      whatever height is left; everything else keeps its natural size. */
@@ -74,7 +74,7 @@
    saved-values summary at the bottom) opt back into --text-fs individually
    via the .fieldBadge class below so they read the same as other content. */
 .wrapper > :global(.card) :global(.badge) {
-  font-size: 0.65rem;
+  font-size: var(--fs-xs);
   padding: 0.3em 0.55em;
 }
 
@@ -117,13 +117,13 @@
 /* 日次記録 / 記録日 / 写真追加 / QR読取 / 保存 — 18px text. Doubled class
    beats Bootstrap's .btn-sm / .form-control-sm font size. */
 .toolbarBtn.toolbarBtn {
-  font-size: 18px;
+  font-size: var(--fs-md);
 }
 
 /* 記録日 date box — a little smaller than the toolbar buttons. 16px is the
    smallest size that keeps iOS Safari from zooming in when it's tapped. */
 .scopeBarControls input.toolbarBtn.toolbarBtn {
-  font-size: 16px;
+  font-size: var(--fs-base);
 }
 
 /* 記録日 box matches the buttons' height and rounding. */
@@ -150,6 +150,28 @@ button.toolbarBtn.toolbarBtn {
 
 button.toolbarBtn > svg {
   flex-shrink: 0;
+}
+
+/* 戻る (left) / 次へ (right), the top row of the 対象利用者 panel. Never
+   squeezed by the open 利用者 list or the choice card below it. */
+.stepNav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  flex-shrink: 0;
+  padding: 0 0.2rem;
+  margin-bottom: 0.4rem;
+}
+
+/* Wide enough to hit easily with a thumb; the arrow sits outside the label. */
+button.stepNavBtn.stepNavBtn {
+  min-width: 112px;
+  justify-content: center;
+}
+
+button.stepNavBtn.stepNavBtn:disabled {
+  opacity: 0.4;
 }
 
 .photoUploadBtn {
@@ -243,7 +265,7 @@ button.toolbarBtn > svg {
   left: 0;
   right: 0;
   bottom: 0;
-  font-size: 0.55rem;
+  font-size: var(--fs-xs);
   font-weight: 700;
   text-align: center;
   color: #fff;
@@ -308,6 +330,9 @@ button.toolbarBtn > svg {
   min-height: 0;
   display: flex;
   flex-direction: column;
+  /* Squeezed to nothing while the 対象利用者 list is open — clip it so it
+     doesn't draw over the list. */
+  overflow: hidden;
 }
 
 /* Hover lift only on devices with a real pointer — on touch screens a tap
@@ -343,7 +368,7 @@ button.toolbarBtn > svg {
    targets. Row height and text scale with the screen height (clamped), so the
    longest list (体調, 5 rows) always fits on screen without scrolling. */
 .choiceTitle {
-  font-size: 20px;
+  font-size: var(--fs-md);
   font-weight: 700;
   /* One line on every screen so the heading height never changes. */
   white-space: nowrap;
@@ -404,7 +429,7 @@ button.toolbarBtn > svg {
   border-radius: 50%;
   border: 2px solid var(--border-color-strong);
   background: var(--secondary-bg);
-  font-size: 1.05rem;
+  font-size: var(--fs-base);
   line-height: 1;
 }
 
@@ -415,8 +440,9 @@ button.toolbarBtn > svg {
 }
 
 .choiceLabel {
-  /* About 70% of the row height, 22–30px — big and easy to read. */
-  font-size: clamp(22px, calc(var(--row-h, 52px) * 0.7), 30px);
+  /* About 60–70% of the row height, 15–30px: big on roomy screens, smaller
+     on short ones so every choice fits without scrolling. */
+  font-size: clamp(15px, calc(var(--row-h, 52px) * 0.62), 30px);
   font-weight: 400;
   line-height: 1.2;
 }
@@ -443,7 +469,7 @@ button.toolbarBtn > svg {
   gap: 0.25rem;
   margin-left: auto;
   padding: 0.1rem 0.55rem;
-  font-size: 0.75em;
+  font-size: var(--fs-xs);
   font-weight: 600;
   color: var(--accent-text);
   background: var(--accent-bg);
@@ -455,7 +481,7 @@ button.toolbarBtn > svg {
   align-items: center;
   gap: 0.4rem;
   margin-bottom: 0.3rem;
-  font-size: 18px;
+  font-size: var(--label-fs);
   font-weight: 700;
   color: var(--accent-text);
 }
@@ -557,24 +583,6 @@ button.toolbarBtn > svg {
   flex-direction: column;
   align-items: center;
   gap: 0.25rem;
-}
-
-/* 保存しますか？ はい / いいえ — overlaid either side of the mic. */
-.confirmYes,
-.confirmNo {
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
-  white-space: nowrap;
-  min-width: 96px;
-}
-
-.confirmYes {
-  right: calc(50% + 52px);
-}
-
-.confirmNo {
-  left: calc(50% + 52px);
 }
 
 /* 検索中… sits beside the mic instead of adding a line under it. */
@@ -849,7 +857,6 @@ button.toolbarBtn > svg {
   /* Phones: the toolbar wraps to two lines, so slimmer buttons and tighter
      cards leave the 5 choice rows enough height to stay easy to tap. */
   .toolbarBtn.toolbarBtn {
-    font-size: 16px;
     padding-top: 0.2rem;
     padding-bottom: 0.2rem;
   }
@@ -892,7 +899,6 @@ button.toolbarBtn > svg {
   }
 
   .choiceTitle {
-    font-size: 17px;
   }
 
   .commentBox {
@@ -900,7 +906,6 @@ button.toolbarBtn > svg {
   }
 
   .commentLabel {
-    font-size: 15px;
     margin-bottom: 0.2rem;
   }
 
@@ -913,7 +918,6 @@ button.toolbarBtn > svg {
      leaves it zoomed and scrolling sideways — keep text inputs at 16px here. */
   .wrapper :global(.form-control),
   .commentInput {
-    font-size: 16px;
   }
 }
 
@@ -946,6 +950,9 @@ button.toolbarBtn > svg {
   min-height: 0;
   display: flex;
   flex-direction: column;
+  /* When the 対象利用者 list is open it takes this area's height; clip the
+     choice card instead of letting its heading spill over the コメント box. */
+  overflow: hidden;
 }
 
 .choiceArea > :global(.card) {
@@ -962,7 +969,10 @@ button.toolbarBtn > svg {
 
 .targetBox :global(.list-group-item-action) {
   width: 100%;
-  flex: 0 0 auto;
+  /* May shrink (never grow): if rounding or the 30px floor would make the
+     rows a few pixels taller than the list, they give those pixels back
+     evenly, so the list always fits exactly and never scrolls. */
+  flex: 0 1 auto;
   /* Exactly one fifth of the list's height (5 rows max) so all rows always
      fit, capped so short lists don't turn into giant tiles. The label and
      the round marker scale with it (see .choiceLabel and the badge rule). */
@@ -970,9 +980,15 @@ button.toolbarBtn > svg {
      --rows (set on the list) is the number of rows shown, at least 5: up to
      5 options look as before, and a longer list shrinks its rows so every
      option still fits on screen without scrolling. */
-  --row-h: min(
-    120px,
-    calc((100cqh - (var(--rows, 5) - 1) * var(--choice-gap) - 1px) / var(--rows, 5))
+  /* Never below 30px, though (the label text shrinks with the row, down to
+     15px — see .choiceLabel): on a short window every row still fits without
+     the list scrolling, and the text never overlaps the next row. */
+  --row-h: max(
+    30px,
+    min(
+      120px,
+      calc((100cqh - (var(--rows, 5) - 1) * var(--choice-gap) - 1px) / var(--rows, 5))
+    )
   );
   height: var(--row-h);
   min-height: 0;
@@ -1059,7 +1075,7 @@ button.toolbarBtn > svg {
   height: min(2.25rem, calc(var(--row-h, 52px) - 10px));
   padding: 0;
   border-radius: 50% !important;
-  font-size: 0.9rem;
+  font-size: var(--fs-sm);
   line-height: 1;
 }
 
@@ -1137,14 +1153,222 @@ button.toolbarBtn > svg {
   }
 
   .choiceTitle {
-    font-size: 17px;
   }
 
   .commentLabel {
-    font-size: 15px;
   }
 
   .commentInput {
     min-height: 34px;
   }
+}
+
+/* Phones: 戻る, 保存 and 次へ stay on one line (still well above the 44px
+   touch-target minimum). */
+@media (max-width: 480px) {
+  button.stepNavBtn.stepNavBtn {
+    min-width: 92px;
+  }
+
+  .stepNav {
+    gap: 0.35rem;
+    margin-bottom: 0.3rem;
+  }
+}
+
+/* Short windows: a slimmer 戻る / 次へ row leaves the choice list more room. */
+@media (max-height: 820px) {
+  button.stepNavBtn.stepNavBtn {
+    min-height: 40px;
+    padding-top: 0.15rem;
+    padding-bottom: 0.15rem;
+  }
+
+  .stepNav {
+    margin-bottom: 0.25rem;
+  }
+}
+
+/* ---------- Phones (up to 575px wide) ----------
+   Laid out for the screen, not shrunk: the toolbar is one row — the date
+   (without the year) takes the free width, 写真追加 / QR読取 become 44px icon
+   buttons, 保存 keeps its label — and the 日次記録 tab (the only screen) is
+   hidden. Text stays at its readable size; the space saved goes to the
+   choice buttons, so the whole screen fits without scrolling. */
+@media (max-width: 575.98px) {
+  .screenTabs {
+    display: none !important;
+  }
+
+  .scopeBar {
+    padding: 0.4rem;
+  }
+
+  .scopeBarControls {
+    gap: 0.35rem;
+  }
+
+  .dateBox {
+    flex: 1 1 0;
+    min-width: 0;
+    max-width: none !important;
+  }
+
+  .dateBox :global(.react-datepicker-wrapper),
+  .dateBox input {
+    width: 100%;
+  }
+
+  .dateBox input.toolbarBtn.toolbarBtn {
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+    font-size: var(--fs-base);
+  }
+
+  .btnLabel {
+    display: none;
+  }
+
+  button.photoUploadBtn.toolbarBtn.toolbarBtn:has(.btnLabel) {
+    min-width: 44px;
+    justify-content: center;
+    padding-left: 0.6rem !important;
+    padding-right: 0.6rem !important;
+  }
+
+  button.stepNavBtn.stepNavBtn {
+    min-width: 88px;
+    min-height: 40px;
+    padding-top: 0.1rem;
+    padding-bottom: 0.1rem;
+  }
+
+  .stepNav {
+    margin-bottom: 0.25rem;
+  }
+
+  .micButton {
+    width: 60px;
+    height: 60px;
+  }
+}
+
+/* ---------- Short screens (small laptop windows, phones in browsers with
+   toolbars, landscape tablets) ----------
+   The labels that the content already explains give their height to the
+   choices: the コメント heading (the box's placeholder says what it's for),
+   and slimmer 戻る / 次へ and mic. */
+@media (max-height: 640px) {
+  /* (Still shown while dictating — it carries the 音声入力中 indicator.) */
+  .commentLabel:not(:has(.commentDictating)) {
+    display: none;
+  }
+
+  button.stepNavBtn.stepNavBtn {
+    min-height: 36px;
+  }
+
+  .micButton {
+    width: 52px;
+    height: 52px;
+  }
+
+  .wrapper {
+    gap: 0.3rem;
+  }
+}
+
+/* While the 対象利用者 list is open it gets the panel to itself: the choice
+   card under it is hidden (not squashed) until a patient is picked or the
+   list is closed. */
+.targetBox:has([data-patient-list-open="true"]) .choiceWrap {
+  display: none;
+}
+
+/* Shorter screens (most laptops, phones): a slimmer category heading
+   (体調を選択…) leaves the choice rows more height. */
+@media (max-height: 760px) {
+  .choiceTitle {
+  }
+
+  .choiceTitle :global(.badge) {
+    width: 1.75rem;
+    height: 1.75rem;
+  }
+}
+
+/* Screens up to 900px tall (most laptops and small monitors): slimmer
+   controls above the choices — toolbar buttons and date 40px, 戻る / 次へ
+   36px, tighter padding — so the choice list gets the height and all its
+   rows fit without scrolling. Text sizes stay the same. */
+@media (max-height: 900px) {
+  .scopeBar {
+    padding-top: 0.3rem;
+    padding-bottom: 0.3rem;
+  }
+
+  button.toolbarBtn.toolbarBtn,
+  .scopeBarControls input.toolbarBtn {
+    min-height: 40px;
+    padding-top: 0.15rem;
+    padding-bottom: 0.15rem;
+  }
+
+  button.stepNavBtn.stepNavBtn {
+    min-height: 36px;
+    padding-top: 0.1rem;
+    padding-bottom: 0.1rem;
+  }
+
+  .stepNav {
+    margin-bottom: 0.2rem;
+  }
+
+  .targetBox {
+    padding-top: 0.35rem;
+    padding-bottom: 0.35rem;
+  }
+
+  .wrapper {
+    gap: 0.4rem;
+  }
+
+  .commentBox {
+    padding-top: 0.3rem;
+    padding-bottom: 0.35rem;
+  }
+
+  .commentLabel {
+    margin-bottom: 0.15rem;
+  }
+
+  .commentInput {
+    min-height: 36px;
+  }
+}
+
+/* 戻る / 次へ sit under the 対象利用者 picker (above the choices): spacing
+   above the row, none below — the choice card has its own top margin. */
+.stepNav {
+  margin-top: 0.35rem;
+  margin-bottom: 0;
+}
+
+/* While the 対象利用者 list is open, 戻る / 次へ step aside with the choice
+   card, so the list gets the panel. */
+.targetBox:has([data-patient-list-open="true"]) .stepNav {
+  display: none;
+}
+
+/* Category heading (🎯 体調を選択…): a 1.75rem badge sets the line's height
+   instead of 2.25rem, and the card around the choices has less top/bottom
+   padding — the height goes to the choice rows. */
+.choiceTitle :global(.badge) {
+  width: 1.75rem;
+  height: 1.75rem;
+}
+
+.targetBox :global(.card-body) {
+  padding-top: 0.15rem;
+  padding-bottom: 0.15rem;
 }

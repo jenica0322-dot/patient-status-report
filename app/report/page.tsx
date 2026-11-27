@@ -381,6 +381,8 @@ export default function ReportPage() {
             f.field_key !== "uketori" &&
             // メモ isn't shown in the report grid (its data stays in the record).
             f.field_key !== "memo" &&
+            // 問題なし has no column of its own (its record value stays; 完食 is ticked with it).
+            f.field_key !== "mondai_nashi" &&
             // Answer columns of categories added in マスター (e.g. 特記) stay off the report.
             f.field_type !== "preset" &&
             f.field_label !== PATIENT_SELECT_FIELD_LABEL
@@ -394,6 +396,19 @@ export default function ReportPage() {
   // after the うけとり column; the group ones after the group's last column.
   // Every マスター category with コメント入力 on gets one, after its last shown
   // column (same rule as the Excel/PDF: server/lib/reportPlan.js).
+  // Column key -> color group: the fixed map, plus a マスター-added column
+  // (e.g. a category's 「なし」) takes its category's group, so it's colored
+  // with that category instead of white (same as server/lib/reportPlan.js).
+  const colGroup = useMemo(() => {
+    const out: Record<string, string> = { ...FIELD_GROUP };
+    for (const c of allCategoryConfigs(dailyFields as any, targetRows)) {
+      const keys = (c.display === "text" ? [c.column] : c.options.map((o) => o.key)).filter((k): k is string => !!k);
+      const group = keys.map((k) => FIELD_GROUP[k]).find(Boolean);
+      if (!group) continue;
+      for (const k of keys) if (!out[k]) out[k] = group;
+    }
+    return out;
+  }, [dailyFields, targetRows]);
   const groupCommentAfter = useMemo(() => {
     const m = new Map<string, { commentKey: string; label: string; group: string }>();
     if (!dailyFields.length) return m;
@@ -405,10 +420,10 @@ export default function ReportPage() {
       if (!shown.length) continue;
       const last = shown.reduce((a, b) => (pos.get(b)! > pos.get(a)! ? b : a));
       if (m.has(last)) continue;
-      m.set(last, { commentKey: c.commentKey, label: `${c.spokenLabel}コメント`, group: FIELD_GROUP[last] });
+      m.set(last, { commentKey: c.commentKey, label: `${c.reportLabel}コメント`, group: colGroup[last] });
     }
     return m;
-  }, [orderedDailyBody, dailyFields, targetRows, dfByKey]);
+  }, [orderedDailyBody, dailyFields, targetRows, dfByKey, colGroup]);
   const commentColCount = 1 + groupCommentAfter.size;
 
   // 報告書コメント欄 blocks and the footer follow the マスター設定 layout, which
@@ -762,7 +777,7 @@ export default function ReportPage() {
             <FileText size={22} />
           </div>
           <div>
-            <h1 className="h4 mb-0 fw-bold">報告書</h1>
+            <h1 className="h1 mb-0">報告書</h1>
             <p className="text-muted mb-0 small">利用者ごとの月次状況記録表兼報告書</p>
           </div>
         </div>
@@ -865,9 +880,6 @@ export default function ReportPage() {
           <Card className="mb-4">
             <Card.Body className={styles.reportBody}>
               <p className={styles.scrollHint}>← 横にスクロールできます →</p>
-              <p className={styles.editHint}>
-                日ごとの欄はダブルクリック（スマホはダブルタップ）で編集できます。✓欄は切り替え、文字欄は Enter で保存・Esc で取消。
-              </p>
               {cellError && (
                 <Alert variant="danger" className="py-1 px-2 mb-2 small" dismissible onClose={() => setCellError(null)}>
                   {cellError}
@@ -1012,7 +1024,7 @@ export default function ReportPage() {
                           return (
                             <Fragment key={f.field_key}>
                               <td
-                                className={`${groupColClass(styles, FIELD_GROUP[f.field_key])} ${cell.className}`}
+                                className={`${groupColClass(styles, colGroup[f.field_key])} ${cell.className}`}
                                 title={cell.title}
                                 onClick={cell.onClick}
                               >

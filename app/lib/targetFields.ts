@@ -29,8 +29,8 @@ export type GroupTargetField = {
   field_label: string;
   // Short name read out by the voice-over (e.g. 体調), not the full heading.
   spokenLabel: string;
-  // Every name that, said aloud, opens this category: its 報告書の列名
-  // (text display), its short name and its full マスター label.
+  // The name that, said aloud, opens this category: its 報告書の列名 (the
+  // same name the voice-over announces). Its ラベル doesn't.
   voiceNames: string[];
   // Where the category's comment is stored.
   anchorKey: string;
@@ -67,6 +67,9 @@ export type StoredCategorySettings = {
   column?: string; // text display: the column holding the answer
   comment?: boolean; // コメント入力 on Status Input
   commentKey?: string; // column the comment is stored on
+  // チェック display: the category's own 報告書の列名 (テキスト display keeps
+  // it as its answer column's name instead).
+  reportName?: string;
 };
 
 // daily_target row types (kept in sync with config for older code / data).
@@ -179,8 +182,13 @@ export type CategoryConfig = {
   builtin: boolean;
   label: string;
   spokenLabel: string;
-  // 報告書の列名 of the text column (text display only).
+  // The category's 報告書の列名: its answer column's name (テキスト display)
+  // or its own stored name (チェック display). Used only by the voice-over —
+  // what's announced and recognized for the category.
   reportColumnName?: string;
+  // The category's name in the 報告書 (its 〜コメント column): the テキスト
+  // answer column's name, else the ラベル shortened — not the voice-over name.
+  reportLabel: string;
   display: ReportDisplay;
   multiple: boolean;
   column?: string;
@@ -239,20 +247,23 @@ function readCategory(key: string, row: MasterRow | undefined, dailyFields: Mast
   const firstColumn = display === "text" ? column : options.find((o) => o.key)?.key;
   const columnOrder = dailyFields.find((f) => f.field_key === firstColumn)?.order_index ?? Number.MAX_SAFE_INTEGER;
   const label = row?.field_label?.trim() || def?.label || key;
+  // Every category's 報告書の列名 (each its own): the answer column's name
+  // (テキスト) or the name stored for the category (チェック). Voice-over only.
+  const reportName =
+    (display === "text" ? columnRow?.field_label?.trim() : cfg.reportName?.trim()) || undefined;
+  const textColumnName = display === "text" ? columnRow?.field_label?.trim() : undefined;
   return {
     field_key: key,
     builtin: !!def,
     label,
     // Always from マスター, so a rename there changes what's announced and
-    // recognized: the 報告書の列名 (text display), otherwise the category's
-    // ラベル shortened (「食べ残し状況を選択」→「食べ残し」). The built-in
-    // name is only a last resort when neither gives anything.
-    spokenLabel:
-      (display === "text" && columnRow?.field_label?.trim()) ||
-      categoryNameFromLabel(label) ||
-      def?.spokenLabel ||
-      label,
-    reportColumnName: display === "text" ? columnRow?.field_label?.trim() || undefined : undefined,
+    // recognized: the 報告書の列名, or — not set yet — the category's ラベル
+    // shortened (「食べ残し状況を選択」→「食べ残し」). The built-in name is
+    // only a last resort when neither gives anything.
+    spokenLabel: reportName || categoryNameFromLabel(label) || def?.spokenLabel || label,
+    reportColumnName: reportName,
+    // The 報告書 keeps its own naming (unaffected by the voice-over name).
+    reportLabel: textColumnName || categoryNameFromLabel(label) || def?.spokenLabel || label,
     display,
     multiple,
     column,
@@ -302,13 +313,19 @@ export function categoryTextColumns(dailyFields: MasterRow[], targetRows: Master
 }
 
 // The daily_target row that stores `cfg` (for saving).
-export function categoryRow(cfg: Pick<CategoryConfig, "field_key" | "label" | "display" | "multiple" | "column" | "comment" | "commentKey" | "options">, order: number) {
+export function categoryRow(
+  cfg: Pick<CategoryConfig, "field_key" | "label" | "display" | "multiple" | "column" | "comment" | "commentKey" | "options" | "reportColumnName">,
+  order: number
+) {
+  const reportName = cfg.reportColumnName?.trim();
   const settings: StoredCategorySettings = {
     display: cfg.display,
     multiple: cfg.multiple,
     comment: cfg.comment,
     ...(cfg.display === "text" && cfg.column ? { column: cfg.column } : {}),
     ...(cfg.commentKey ? { commentKey: cfg.commentKey } : {}),
+    // チェック display stores its 報告書の列名 here (テキスト: on its column).
+    ...(cfg.display === "checkbox" && reportName ? { reportName } : {}),
   };
   return {
     screen_key: TARGET_GROUP_SCREEN_KEY,
@@ -353,6 +370,12 @@ export function buildGroupTargetFields(targetRows: MasterRow[], dailyFields: Mas
         if (o.sub?.length) {
           return { label: o.label, next: o.sub.map((s) => ({ label: s, key, value: s, listValue })) };
         }
+        // 食べ残し's 「問題なし」 is the no-issues shortcut on Status Input
+        // whichever column マスター saves it to (e.g. 完食): it always runs
+        // through 問題なし's own column, and the shortcut ticks 完食 too.
+        if (c.field_key === "__tabenokoshi" && o.label === "問題なし") {
+          return { label: o.label, key: NO_ISSUES_KEY, value: true };
+        }
         return { label: o.label, key, value: typeOf(key) === "checkbox" ? true : o.label, listValue };
       })
       .filter((o): o is GroupOption => !!o);
@@ -360,13 +383,9 @@ export function buildGroupTargetFields(targetRows: MasterRow[], dailyFields: Mas
       field_key: c.field_key,
       field_label: c.label,
       spokenLabel: c.spokenLabel,
-      voiceNames: [
-        ...new Set(
-          [c.reportColumnName, c.spokenLabel, categoryNameFromLabel(c.label), c.label]
-            .map((n) => n?.trim())
-            .filter((n): n is string => !!n)
-        ),
-      ],
+      // Only the voice-over name (its 報告書の列名) opens the category by
+      // voice — not its ラベル or a name shortened from it.
+      voiceNames: c.spokenLabel.trim() ? [c.spokenLabel.trim()] : [],
       anchorKey: c.commentKey ?? c.column ?? options[0]?.key ?? c.field_key,
       options,
       multiple: c.multiple,

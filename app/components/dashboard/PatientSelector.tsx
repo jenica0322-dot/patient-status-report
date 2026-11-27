@@ -294,7 +294,9 @@ export default function PatientSelector({
     : "すべてのエリア";
 
   return (
-    <div className={styles.wrapper} ref={containerRef}>
+    // data-patient-list-open: lets Status Input give the open list the panel
+    // to itself (it hides the choice card underneath meanwhile).
+    <div className={styles.wrapper} ref={containerRef} data-patient-list-open={open && !locked ? "true" : undefined}>
       <label className={styles.label}>対象利用者</label>
       <button
         type="button"

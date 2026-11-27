@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useMemo, Fragment } from "react";
-import { MicFill, StopFill, CheckCircleFill, CheckCircle, Circle, ChevronDown, ChatLeftText, CameraFill, QrCodeScan, Trash, FloppyFill } from "react-bootstrap-icons";
+import { MicFill, StopFill, CheckCircleFill, CheckCircle, Circle, ChevronDown, ChatLeftText, CameraFill, QrCodeScan, Trash, FloppyFill, ChevronLeft, ChevronRight } from "react-bootstrap-icons";
 import { Spinner } from "react-bootstrap";
 import styles from "@/app/styles/StatusMatcher.module.css";
 import {
@@ -21,7 +21,7 @@ import CameraCapture from "@/app/components/dashboard/CameraCapture";
 import QRScanner from "@/app/components/dashboard/QRScanner";
 import { normalizeSpokenDigits, toHiragana } from "@/app/lib/voiceText";
 import { findPatientByTargetUserId, parseTargetUserId } from "@/app/lib/qrTargetUser";
-import { consumeVoiceFlowResume } from "@/app/lib/voiceFlowResume";
+import { consumeVoiceFlowResume, markVoiceFlowResume } from "@/app/lib/voiceFlowResume";
 import {
   getGroupTargetFields,
   NO_ISSUES_KEY,
@@ -165,7 +165,7 @@ const YOSHI_VARIANTS = /^(良し|善し|好し|吉|止し|よーし|よしっ|�
 const NASHI_VARIANTS = /^(無し|梨|無|なーし|なしっ)$/;
 
 // Normalizes a short spoken answer before testing it against AFFIRMATIVE /
-// NEGATIVE / CONFIRM_SAVE_*: drops trailing punctuation the recognizer
+// NEGATIVE: drops trailing punctuation the recognizer
 // appends ("よし。" → "よし."), and folds katakana ("ヨシ") and the common
 // kanji/stretched variants above into よし/なし. Anything else is returned
 // with its katakana intact, since "チェック"/"オーケー" are matched as-is.
@@ -186,13 +186,6 @@ function isCheckboxAnswer(t: string): boolean {
 // matches the visible button label so saying what's on screen also works.
 const PHOTO_UPLOAD_COMMAND = /^(写真を?アップロード|アップロード写真|写真追加|uploadphoto|photoupload)$/;
 const PATIENT_SELECT_FIELD_LABEL = "利用者選択";
-
-// Answers to the sequential flow's final "保存しますか？" confirmation. Distinct
-// from AFFIRMATIVE/NEGATIVE above (those are per-field "did this happen"
-// checkbox answers) — this is a plain yes/no to a yes/no question, so it
-// accepts the words people actually say to that ("はい"/"いいえ") too.
-const CONFIRM_SAVE_YES = /^(はい|うん|お願いします|する|よし|オーケー|ok|保存|ほぞん|save)$/;
-const CONFIRM_SAVE_NO = /^(いいえ|いや|しない|やめる|キャンセル|no)$/;
 
 // Field groups where the fields represent mutually exclusive states of one
 // underlying question (e.g. a meal was 完食/半分/残し — finished, half-eaten,
@@ -517,6 +510,17 @@ export default function StatusMatcher() {
   const [recordDate, setRecordDate] = useState(todayIso());
   const [yearMonth, setYearMonth] = useState(currentYearMonth());
 
+  // Phone width: the toolbar fits on one row (date without the year,
+  // icon-only 写真追加 / QR読取 — see the phone rules in the CSS).
+  const [isPhone, setIsPhone] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 575.98px)");
+    const update = () => setIsPhone(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+
   const [fields, setFields] = useState<Field[]>([]);
   const [focusKey, setFocusKey] = useState<string>("");
   // うけとり's heading — its マスター label (daily_target row).
@@ -554,8 +558,6 @@ export default function StatusMatcher() {
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [qrOpen, setQrOpen] = useState(false);
-  // Drives the "保存しますか？" yes/no UI at the end of the sequential auto-flow.
-  const [awaitingSaveConfirm, setAwaitingSaveConfirm] = useState(false);
 
   const fieldMenuRef = useRef<HTMLDivElement | null>(null);
   const photoInputRef = useRef<HTMLInputElement | null>(null);
@@ -592,10 +594,9 @@ export default function StatusMatcher() {
   const recordDateRef = useRef(recordDate);
   const yearMonthRef = useRef(yearMonth);
   // Sequential auto-flow phase: "off" (manual, existing behavior) | "field"
-  // (auto-asking Target Fields in order) | "confirm-save" (asking the final
-  // 保存しますか？ yes/no). A ref because handleFinalTranscript's long-lived
-  // recognition closure needs the current value, not the one at mount.
-  const flowPhaseRef = useRef<"off" | "field" | "confirm-save">("off");
+  // (auto-asking Target Fields in order). A ref because handleFinalTranscript's
+  // long-lived recognition closure needs the current value, not the one at mount.
+  const flowPhaseRef = useRef<"off" | "field">("off");
   // Skips starting the auto-flow for a patient already selected when this
   // screen mounts/reloads (e.g. restored from localStorage) — it should only
   // kick in the moment a patient is newly selected during this session.
@@ -751,7 +752,6 @@ export default function StatusMatcher() {
       // don't carry on for this one. The mic is left as it is.
       const wasActive = flowPhaseRef.current !== "off";
       flowPhaseRef.current = "off";
-      setAwaitingSaveConfirm(false);
       if (wasActive && typeof window !== "undefined") window.speechSynthesis?.cancel();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -879,6 +879,54 @@ export default function StatusMatcher() {
       pickerFields.every((f) => shouldSkipInAutoFlow(f, values) || isTargetFieldAnswered(f, values)),
     [pickerFields, values]
   );
+  // Unpicks one option in `next` (in place) — a shared text column (複数選択
+  // テキスト) only loses this name.
+  const clearLeaf = (leaf: GroupOption, next: Record<string, { value?: any; comment?: string }>) => {
+    if (!leaf.key) return;
+    const cur = next[leaf.key]?.value;
+    if (leaf.listValue) {
+      if (listValues(cur).includes(leaf.value)) {
+        next[leaf.key] = { ...(next[leaf.key] || {}), value: toggledListValue(cur, leaf.value, false) };
+      }
+    } else if (cur === leaf.value) {
+      next[leaf.key] = { ...(next[leaf.key] || {}), value: leaf.value === true ? false : "" };
+    }
+  };
+
+  // Picks one option in `next` (in place).
+  const setLeaf = (leaf: GroupOption, next: Record<string, { value?: any; comment?: string }>) => {
+    if (!leaf.key) return;
+    next[leaf.key] = {
+      ...(next[leaf.key] || {}),
+      value: leaf.listValue ? toggledListValue(next[leaf.key]?.value, leaf.value, true) : leaf.value,
+    };
+  };
+
+  // Each category's own 「なし」 (no issue with that question only).
+  const noneOptionOf = (group: GroupTargetField) => groupLeafOptions(group.options).find((o) => o.label === "なし");
+
+  // Applied to `next` (in place) just before `option` is picked:
+  // - An issue (anything but 「なし」) in a category after 食べ残し means not
+  //   everything is fine, so the global 問題なし is unchecked. The other
+  //   categories keep their answers.
+  // - On a 複数選択 category, 「なし」 and the issues exclude each other:
+  //   「なし」 clears the issues, an issue clears 「なし」.
+  const applyPickRules = (
+    group: GroupTargetField,
+    option: GroupOption,
+    next: Record<string, { value?: any; comment?: string }>
+  ) => {
+    const isNone = option.label === "なし";
+    if (!isNone && group.field_key !== "__tabenokoshi" && next[NO_ISSUES_KEY]?.value === true) {
+      next[NO_ISSUES_KEY] = { ...next[NO_ISSUES_KEY], value: false };
+    }
+    if (!group.multiple) return;
+    for (const leaf of groupLeafOptions(group.options)) {
+      if (leaf === option) continue;
+      if (isNone || leaf.label === "なし") clearLeaf(leaf, next);
+    }
+  };
+
   // `replace` (used for voice answers) clears the field's previous selection
   // first so only the newly spoken option remains — even on a `multiple`
   // picker, where a tap toggles options individually instead.
@@ -889,10 +937,11 @@ export default function StatusMatcher() {
     const next = { ...v };
     if (group.multiple && !replace) {
       const wasSelected = isGroupOptionSelected(option, v);
+      if (!wasSelected) applyPickRules(group, option, next);
       next[option.key!] = {
-        ...(v[option.key!] || {}),
+        ...(next[option.key!] || {}),
         value: option.listValue
-          ? toggledListValue(v[option.key!]?.value, option.value, !wasSelected)
+          ? toggledListValue(next[option.key!]?.value, option.value, !wasSelected)
           : wasSelected
             ? option.value === true
               ? false
@@ -906,13 +955,14 @@ export default function StatusMatcher() {
       );
       return;
     }
+    applyPickRules(group, option, next);
     for (const leaf of groupLeafOptions(group.options)) {
       if (!leaf.key || leaf.key === option.key) continue;
       if (v[leaf.key]?.value === leaf.value) {
-        next[leaf.key] = { ...(v[leaf.key] || {}), value: leaf.value === true ? false : "" };
+        next[leaf.key] = { ...(next[leaf.key] || {}), value: leaf.value === true ? false : "" };
       }
     }
-    next[option.key!] = { ...(v[option.key!] || {}), value: option.value };
+    next[option.key!] = { ...(next[option.key!] || {}), value: option.value };
     valuesRef.current = next;
     setValues(next);
     setStatusMsg(`${group.field_label}: 「${option.label}」を記録しました`);
@@ -1161,27 +1211,11 @@ export default function StatusMatcher() {
     return v !== undefined && v !== null && v !== "";
   };
 
-  // The next category still to be answered after `fromKey` (in 表示順),
-  // wrapping round to any earlier one that was left unanswered.
-  const nextIncompleteField = (
-    fromKey: string,
-    snapshot: Record<string, { value?: any; comment?: string }>
-  ): Field | GroupTargetField | undefined => {
-    const idx = pickerFields.findIndex((f) => f.field_key === fromKey);
-    const ordered = [...pickerFields.slice(idx + 1), ...pickerFields.slice(0, Math.max(idx, 0))];
-    return ordered.find((f) => f.field_key !== fromKey && !isFlowFieldDone(f, snapshot));
-  };
-
   // After a voice command ends (e.g. 「コメント終了」): ask again for the
   // current category if it's still unanswered, otherwise announce the next
-  // unanswered one — or 保存しますか？ once everything is done (that only
-  // asks; nothing is saved without はい or the 保存 button).
+  // one in order (nothing after the last one).
   const announceCurrentOrNext = () => {
     if (!pickerFields.length || !selectedPatientRef.current) return;
-    if (flowPhaseRef.current === "confirm-save") {
-      promptSaveConfirm();
-      return;
-    }
     flowPhaseRef.current = "field";
     const snapshot = valuesRef.current;
     const current = pickerFields.find((f) => f.field_key === focusKeyRef.current);
@@ -1196,18 +1230,25 @@ export default function StatusMatcher() {
       goToField(current, "again");
       return;
     }
-    const next = nextIncompleteField(focusKeyRef.current, snapshot);
+    // The next category in order; on the last one, stay (saving is the
+    // 保存 button or saying 「保存」).
+    const next = nextSequentialField(focusKeyRef.current, snapshot);
     if (next) goToField(next, "next");
-    else promptSaveConfirm();
   };
 
-  // Asks the final "保存しますか？" once every Target Field has been answered.
-  const promptSaveConfirm = () => {
-    flowPhaseRef.current = "confirm-save";
-    lastFinalRef.current = "";
-    setAwaitingSaveConfirm(true);
-    setStatusMsg("💾 保存しますか？");
-    speak("保存しますか？");
+  // The category right after `fromKey` in 表示順 — strictly forward, never
+  // wrapping back to an earlier one. Passes over 利用者選択 and `skipKeys`.
+  // undefined on the last category.
+  const nextSequentialField = (
+    fromKey: string,
+    snapshot: Record<string, { value?: any; comment?: string }>,
+    skipKeys: string[] = []
+  ): Field | GroupTargetField | undefined => {
+    const idx = pickerFields.findIndex((f) => f.field_key === fromKey);
+    if (idx === -1) return undefined;
+    return pickerFields
+      .slice(idx + 1)
+      .find((f) => !shouldSkipInAutoFlow(f, snapshot) && !skipKeys.includes(f.field_key));
   };
 
   // Called right after `fromKey` has been answered (by voice or by tapping a
@@ -1228,14 +1269,9 @@ export default function StatusMatcher() {
     const snapshot = valuesSnapshot ?? valuesRef.current;
     if (pickerFields.findIndex((f) => f.field_key === fromKey) === -1) return;
     skipKeys.forEach((k) => passedKeysRef.current.add(k));
-    // Never skips a category still unanswered (earlier ones included), and
-    // never re-asks one already answered.
-    const next = nextIncompleteField(fromKey, snapshot);
-    if (next) {
-      goToField(next, "next");
-    } else {
-      promptSaveConfirm();
-    }
+    // Straight on to the next category in order; the last one stays put.
+    const next = nextSequentialField(fromKey, snapshot, skipKeys);
+    if (next) goToField(next, "next");
   };
 
   // 次へ (said on 体調): inside the auto-flow, advance as usual (which
@@ -1275,42 +1311,20 @@ export default function StatusMatcher() {
     const snapshot = valuesSnapshot ?? valuesRef.current;
     const idx = pickerFields.findIndex((f) => f.field_key === fromKey);
     if (idx === -1) return;
-    const next = pickerFields
-      .slice(idx + 1)
-      .find((f) => !shouldSkipInAutoFlow(f, snapshot) && !skipKeys.includes(f.field_key));
+    // On the last category (in マスター's 表示順) it stays put; saving is
+    // the 保存 button.
+    const next = nextSequentialField(fromKey, snapshot, skipKeys);
     if (next) {
       setFocusKey(next.field_key);
       focusKeyRef.current = next.field_key;
-      return;
     }
-    // That was the last category (in マスター's 表示順): go back to one still
-    // unanswered, or — everything answered — move on to saving: show
-    // 保存しますか？ (はい / いいえ beside the mic), without starting the mic or
-    // speaking, since this came from a tap.
-    const pending = pickerFields.find(
-      (f) =>
-        f.field_key !== fromKey &&
-        !skipKeys.includes(f.field_key) &&
-        !shouldSkipInAutoFlow(f, snapshot) &&
-        !isTargetFieldAnswered(f, snapshot)
-    );
-    if (pending) {
-      setFocusKey(pending.field_key);
-      focusKeyRef.current = pending.field_key;
-      return;
-    }
-    flowPhaseRef.current = "confirm-save";
-    lastFinalRef.current = "";
-    setAwaitingSaveConfirm(true);
-    setStatusMsg("💾 保存しますか？");
   };
 
-  // Ends the voice-question flow once 保存しますか？ is answered (はい or いいえ):
-  // stops the mic right away and keeps anything still in flight — pending TTS,
-  // or a trailing result from the session being stopped — from asking again
-  // or being read as a new command.
+  // Ends the voice-question flow when saving: stops the mic right away and
+  // keeps anything still in flight — pending TTS, or a trailing result from
+  // the session being stopped — from asking again or being read as a new
+  // command.
   const endVoiceFlow = () => {
-    setAwaitingSaveConfirm(false);
     setCommentModeOn(false);
     flowPhaseRef.current = "off";
     if (typeof window !== "undefined") window.speechSynthesis?.cancel();
@@ -1318,16 +1332,59 @@ export default function StatusMatcher() {
     stopAll();
   };
 
-  const confirmSaveYes = async () => {
-    // Stopped before saving (handleSaveRecord stops it too; repeating is harmless).
-    endVoiceFlow();
-    await handleSaveRecord();
+  // ---------- 戻る / 次へ buttons ----------
+  // Step through the categories in 表示順, one at a time, in either
+  // direction. Nothing entered is cleared — values stay as they are, so an
+  // answer can be checked or changed (e.g. 体調 after 問題なし, which the
+  // flow otherwise skips) without leaving this screen. The last category is
+  // the end; saving is the 保存 button.
+  const navSteps = pickerFields.filter((f) => !shouldSkipInAutoFlow(f, values));
+  const navIndex = navSteps.findIndex((f) => f.field_key === focusKey);
+
+  const navigateToStep = (target: Field | GroupTargetField | undefined, direction: "back" | "next") => {
+    if (savingRecordRef.current) return;
+    // The voice question flow keeps going (announcing where it moved to)
+    // when it was running; tap-only use just moves the screen.
+    const voice = flowPhaseRef.current === "field";
+    // Going forward past 体調 (where nothing picked is a valid answer) counts
+    // as answering it, the same as saying 「次へ」.
+    const current = navSteps[navIndex];
+    if (direction === "next" && current && getGroupTargetFields().find((g) => g.field_key === current.field_key)?.multiple) {
+      passedKeysRef.current.add(current.field_key);
+    }
+    // Nothing before the first / after the last category (次へ / 戻る are
+    // disabled there).
+    if (!target) return;
+    if (voice) {
+      flowPhaseRef.current = "field";
+      goToField(target, "next");
+    } else {
+      flowPhaseRef.current = "off";
+      setFocusKey(target.field_key);
+      focusKeyRef.current = target.field_key;
+    }
   };
 
-  const confirmSaveNo = () => {
-    endVoiceFlow();
-    setStatusMsg("保存をキャンセルしました");
+  // The step after the one on screen, strictly in 表示順. If the screen is on
+  // something outside the list (e.g. 利用者選択), the first step after it —
+  // never back to the start.
+  const nextNavStep = (): Field | GroupTargetField | undefined => {
+    if (navIndex !== -1) return navSteps[navIndex + 1];
+    const pos = pickerFields.findIndex((f) => f.field_key === focusKey);
+    return pickerFields.slice(pos + 1).find((f) => navSteps.includes(f));
   };
+
+  const goBackStep = () => {
+    if (navIndex > 0) navigateToStep(navSteps[navIndex - 1], "back");
+  };
+
+  const goNextStep = () => {
+    navigateToStep(nextNavStep(), "next");
+  };
+
+  const canGoBack = !savingRecord && navIndex > 0;
+  // The last category is the end.
+  const canGoNext = !savingRecord && !!nextNavStep();
 
   // Starts the sequential Target Field auto-flow from the first not-skipped
   // Target Field entry (same entries, same order as the 対象フィールド dropdown)
@@ -1338,16 +1395,15 @@ export default function StatusMatcher() {
     resumeFlowRef.current = false;
     flowPhaseRef.current = "field";
     passedKeysRef.current = new Set();
-    setAwaitingSaveConfirm(false);
     const first = pickerFields.find((f) => !shouldSkipInAutoFlow(f, valuesRef.current));
     if (!first) return;
     goToField(first);
   };
 
-  // Restarts the auto-flow after returning from the 報告書 screen.
-  // Always from the top — the first category in マスター's 表示順 (うけとり) —
-  // not from the first unanswered one, so coming back never opens on an item
-  // further down the list (e.g. a newly added 状況).
+  // Restarts the auto-flow after coming back from another page (報告書,
+  // マスター, …): always from the first category in マスター's 表示順
+  // (うけとり) — announced by its 報告書の列名, the mic then listening — so
+  // coming back never opens on an item further down the list.
   const resumeAutoFlow = () => {
     resumeFlowRef.current = false;
     if (!pickerFields.length) return;
@@ -1356,6 +1412,15 @@ export default function StatusMatcher() {
 
   useEffect(() => {
     if (consumeVoiceFlowResume()) resumeFlowRef.current = true;
+    // Leaving this page (to any other page, with a patient selected): mark
+    // the return, so the voice-over starts again when the user comes back.
+    // Any speech still playing stops here, so it never carries on over the
+    // other page.
+    return () => {
+      if (selectedPatientRef.current) markVoiceFlowResume();
+      if (typeof window !== "undefined") window.speechSynthesis?.cancel();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -1426,50 +1491,44 @@ export default function StatusMatcher() {
     }
   };
 
-  // 「問題なし」 (tapped or spoken on 食べ残し) = a completed meal with no health
-  // issues: 完食 (kanshoku) and 問題なし are both checked, 半分/残し cleared,
-  // every 体調 item cleared, the 体調 step is skipped, and the record
-  // (食べ残し + 体調) is saved right away — one tap, no separate 保存 press.
-  // Spoken (`viaVoice`), it only records the selection and moves on to the
-  // next item — voice input never saves; that's left to 保存.
+  // The global 「問題なし」 (tapped or spoken on 食べ残し) = everything is fine:
+  // 完食 (kanshoku) and 問題なし are checked on 食べ残し, and every category
+  // after 食べ残し (in 表示順) gets its own 「なし」 — whatever was picked
+  // there before is cleared. A category with no 「なし」 option is just
+  // cleared. Then the record is saved right away — no separate 保存 press.
+  // Tapped or spoken, it's the same: the screen stays on 食べ残し (no move to
+  // the next category). Saving ends the voice flow, as 保存 always does.
+  // (An issue picked afterwards unchecks 問題なし — see applyPickRules.)
   const applyNoIssues = (viaVoice = false) => {
     if (savingRecordRef.current) return;
-    const tabenokoshi = getGroupTargetFields().find((g) => g.field_key === "__tabenokoshi")!;
-    const taicho = getGroupTargetFields().find((g) => g.field_key === "__taicho")!;
-    const v = valuesRef.current;
-    const next = { ...v };
-    // Clear every 食べ残し and 体調 choice first…
-    for (const leaf of [...groupLeafOptions(tabenokoshi.options), ...groupLeafOptions(taicho.options)]) {
-      if (leaf.key && v[leaf.key]?.value === leaf.value) {
-        next[leaf.key] = { ...(v[leaf.key] || {}), value: leaf.value === true ? false : "" };
-      }
+    const groups = getGroupTargetFields();
+    const tabenokoshi = groups.find((g) => g.field_key === "__tabenokoshi")!;
+    const idx = pickerFields.findIndex((f) => f.field_key === tabenokoshi.field_key);
+    const following = pickerFields
+      .slice(idx + 1)
+      .map((f) => groups.find((g) => g.field_key === f.field_key))
+      .filter((g): g is GroupTargetField => !!g);
+    const next = { ...valuesRef.current };
+    // Clear every 食べ残し choice and every choice in the categories after it…
+    for (const g of [tabenokoshi, ...following]) {
+      for (const leaf of groupLeafOptions(g.options)) clearLeaf(leaf, next);
     }
-    // …then check 完食 and 問題なし together.
-    next.kanshoku = { ...(v.kanshoku || {}), value: true };
-    next.mondai_nashi = { ...(v.mondai_nashi || {}), value: true };
+    // …then 完食 + 問題なし, and each following category's own 「なし」.
+    next.kanshoku = { ...(next.kanshoku || {}), value: true };
+    next[NO_ISSUES_KEY] = { ...(next[NO_ISSUES_KEY] || {}), value: true };
+    for (const g of following) {
+      const none = noneOptionOf(g);
+      if (none) setLeaf(none, next);
+      passedKeysRef.current.add(g.field_key);
+    }
     valuesRef.current = next;
     setValues(next);
 
-    if (viaVoice) {
-      setMatchStatus("match");
-      setStatusMsg(`${tabenokoshi.field_label}: 「${NO_ISSUES_LABEL}」を記録しました`);
-      continueVoiceFlow();
-      advanceAfterSelection(tabenokoshi.field_key, next, [taicho.field_key]);
-      return;
-    }
+    if (viaVoice) setMatchStatus("match");
 
-    // Skip the 体調 step: land on the next unanswered Target Field after it
-    // (if any), otherwise stay on 食べ残し so the saved 問題なし selection
-    // stays in view — the 体調 screen is never shown.
-    const idx = pickerFields.findIndex((f) => f.field_key === taicho.field_key);
-    const following = (idx === -1 ? [] : pickerFields.slice(idx + 1)).find((f) => !shouldSkipInAutoFlow(f, next));
-    const landingKey = following?.field_key ?? tabenokoshi.field_key;
-    setFocusKey(landingKey);
-    focusKeyRef.current = landingKey;
-
-    // Save 食べ残し and 体調 together now. handleSaveRecord reads valuesRef,
-    // which already holds both, and ends the voice flow (no 保存しますか？).
-    void handleSaveRecord(`✅ 「${NO_ISSUES_LABEL}」— 完食・体調問題なしで保存しました`);
+    // Save now (stays on 食べ残し). handleSaveRecord reads valuesRef, which
+    // already holds everything, and ends the voice flow.
+    void handleSaveRecord(`✅ 「${NO_ISSUES_LABEL}」— すべて問題なしで保存しました`);
   };
 
   // Choices shown on screen for the active Target Field when it's a click-choice
@@ -1518,7 +1577,13 @@ export default function StatusMatcher() {
         return true;
       }
       let next = valuesRef.current;
-      for (const o of leaves) next = setMultiGroupOption(o, !removing, next);
+      for (const o of leaves) {
+        if (!removing) {
+          next = { ...next };
+          applyPickRules(activeGroup, o, next);
+        }
+        next = setMultiGroupOption(o, !removing, next);
+      }
       valuesRef.current = next;
       setValues(next);
       setMatchStatus("match");
@@ -1560,23 +1625,18 @@ export default function StatusMatcher() {
     return true;
   };
 
-  // When a yes/no answer is expected (a focused checkbox field, or the final
-  // 保存しますか？) and the recognizer's top guess isn't one but a lower-ranked
+  // When an answer is expected (a choice, or a focused checkbox field's
+  // yes/no) and the recognizer's top guess isn't one but a lower-ranked
   // alternative is, use that alternative. Otherwise the top guess stands.
   const pickAnswerAlternative = (top: string, alternatives: string[]): string => {
     if (!alternatives.length) return top;
     // Dictating a comment: take the words as heard, not a choice-shaped guess.
-    if (commentModeRef.current && flowPhaseRef.current !== "confirm-save") return top;
+    if (commentModeRef.current) return top;
     // A category name is a command of its own — don't swap it for an
     // alternative that happens to sound like one of the current choices.
-    if (flowPhaseRef.current !== "confirm-save" && matchCategoryName(top, getGroupTargetFields(), true)) return top;
+    if (matchCategoryName(top, getGroupTargetFields(), true)) return top;
     let isAnswer: ((t: string) => boolean) | null = null;
-    if (flowPhaseRef.current === "confirm-save") {
-      isAnswer = (t) => {
-        const a = normalizeAnswer(t);
-        return CONFIRM_SAVE_YES.test(a) || CONFIRM_SAVE_NO.test(a);
-      };
-    } else if (activeTargetChoices().length) {
+    if (activeTargetChoices().length) {
       const choices = activeTargetChoices();
       const multi = getGroupTargetFields().find((g) => g.field_key === focusKeyRef.current)?.multiple;
       isAnswer = (t) =>
@@ -1649,7 +1709,6 @@ export default function StatusMatcher() {
   // then keeps listening for its answer (the voice flow carries on from there).
   const switchToCategory = (category: GroupTargetField) => {
     flowPhaseRef.current = "field";
-    setAwaitingSaveConfirm(false);
     goToField(category, "first");
   };
 
@@ -1673,7 +1732,7 @@ export default function StatusMatcher() {
 
     // While dictating a comment, every utterance is comment text — even one
     // that sounds like a choice (半分, なし…) — except 「コメント終了」 to stop,
-    // and 保存 / the はい・いいえ answer to 保存しますか？.
+    // and 保存.
     if (commentModeRef.current) {
       // 「…少なかったです。終了」 in one breath: the sentence is comment text
       // and the trailing 終了/完了 still ends dictation.
@@ -1691,36 +1750,13 @@ export default function StatusMatcher() {
         announceCurrentOrNext();
         return;
       }
-      const isSaveAnswer =
-        /^(保存|ほぞん|save)$/.test(low) ||
-        (flowPhaseRef.current === "confirm-save" &&
-          (CONFIRM_SAVE_YES.test(spokenCommand) || CONFIRM_SAVE_NO.test(spokenCommand)));
-      if (!isSaveAnswer) {
+      if (!/^(保存|ほぞん|save)$/.test(low)) {
         if (!appendVoiceComment(rawFinal)) {
           setCommentModeOn(false);
           setStatusMsg("この項目にはコメントを入力できません");
         }
         return;
       }
-    }
-
-    // The auto-flow's final "保存しますか？" confirmation takes priority over every
-    // other interpretation while it's pending — nothing else is reachable by
-    // voice until this yes/no is answered.
-    if (flowPhaseRef.current === "confirm-save") {
-      const cleanedConfirm = normalizeAnswer(rawFinal);
-      if (CONFIRM_SAVE_YES.test(cleanedConfirm)) {
-        confirmSaveYes();
-      } else if (CONFIRM_SAVE_NO.test(cleanedConfirm)) {
-        confirmSaveNo();
-      } else if (foldChoiceText(rawFinal).length >= 4 && appendVoiceComment(rawFinal.replace(/^コメント[:：]?\s*/, ""))) {
-        // A sentence (not a stray short word) said while 保存しますか？ is
-        // pending is still a comment; the question stays open.
-        setStatusMsg("💬 コメントに追加しました — 保存しますか？（はい／いいえ）");
-      } else {
-        setStatusMsg("「はい」または「いいえ」でお答えください");
-      }
-      return;
     }
 
     if (/^(保存|ほぞん|save)$/.test(low)) {
@@ -1985,7 +2021,7 @@ export default function StatusMatcher() {
       <div className={styles.scopeBar}>
         <div className={styles.scopeBarControls}>
           {selectedPatient && (<>
-          <div className="d-flex gap-2">
+          <div className={`d-flex gap-2 ${styles.screenTabs}`}>
             {SCREENS.map((s) => (
               <button
                 key={s.key}
@@ -2004,6 +2040,8 @@ export default function StatusMatcher() {
             <JaDateInput
               className={`form-control form-control-sm ${styles.toolbarBtn}`}
               maxWidth={250}
+              wrapperClassName={styles.dateBox}
+              short={isPhone}
               value={recordDate}
               onChange={setRecordDate}
             />
@@ -2018,9 +2056,11 @@ export default function StatusMatcher() {
             type="button"
             className={`btn btn-sm btn-outline-primary ${styles.photoUploadBtn} ${styles.toolbarBtn} ${styles.secondaryBtn}`}
             onClick={handlePhotoButtonClick}
+            aria-label="写真追加"
+            title="写真追加"
           >
             <CameraFill size="1em" />
-            <span>写真追加</span>
+            <span className={styles.btnLabel}>写真追加</span>
           </button>
           <input
             ref={photoInputRef}
@@ -2035,22 +2075,20 @@ export default function StatusMatcher() {
             className={`btn btn-sm btn-outline-primary ${styles.photoUploadBtn} ${styles.toolbarBtn} ${styles.secondaryBtn}`}
             onClick={() => setQrOpen(true)}
             disabled={isSearching}
+            aria-label="QR読取"
+            title="QR読取"
           >
             <QrCodeScan size="1em" />
-            <span>QR読取</span>
+            <span className={styles.btnLabel}>QR読取</span>
           </button>
-          {/* Always laid out (just invisible until every field is answered),
-              so it appearing after a voice answer never re-wraps the toolbar
-              and pushes the screen down. */}
+          {/* 保存: always shown at the right end of the toolbar and can be
+              pressed at any time (only not while a save is in progress). */}
           {selectedPatient && (
             <button
               type="button"
               className={`btn btn-success ms-auto px-4 ${styles.photoUploadBtn} ${styles.toolbarBtn} ${styles.primaryBtn}`}
-              style={allTargetFieldsAnswered ? undefined : { visibility: "hidden" }}
-              aria-hidden={!allTargetFieldsAnswered}
-              tabIndex={allTargetFieldsAnswered ? undefined : -1}
               onClick={() => handleSaveRecord()}
-              disabled={savingRecord || !allTargetFieldsAnswered}
+              disabled={savingRecord}
               aria-busy={savingRecord}
             >
               {/* While saving only the icon turns into a same-size spinner; the
@@ -2140,6 +2178,32 @@ export default function StatusMatcher() {
             }
           }}
         />
+
+        {/* 戻る (left) / 次へ (right), under the 対象利用者 picker: move between
+            the categories without clearing anything entered — see
+            navigateToStep. */}
+        {selectedPatient && navSteps.length > 0 && (
+          <div className={styles.stepNav}>
+            <button
+              type="button"
+              className={`btn btn-sm btn-outline-primary ${styles.photoUploadBtn} ${styles.toolbarBtn} ${styles.secondaryBtn} ${styles.stepNavBtn}`}
+              onClick={goBackStep}
+              disabled={!canGoBack}
+            >
+              <ChevronLeft size="1em" />
+              <span>戻る</span>
+            </button>
+            <button
+              type="button"
+              className={`btn btn-sm btn-outline-primary ${styles.photoUploadBtn} ${styles.toolbarBtn} ${styles.secondaryBtn} ${styles.stepNavBtn}`}
+              onClick={goNextStep}
+              disabled={!canGoNext}
+            >
+              <span>次へ</span>
+              <ChevronRight size="1em" />
+            </button>
+          </div>
+        )}
 
         {!selectedPatient ? (
           <p style={{ textAlign: "center", color: "var(--secondary-text)", fontSize: "var(--text-fs)", marginTop: "0.5rem", marginBottom: 0 }}>
@@ -2395,20 +2459,6 @@ export default function StatusMatcher() {
       {/* No transcript strip: the space goes to the choice list. The status
           message bar is hidden too; statusMsg is still set, just not shown. */}
       <div className={styles.controls}>
-        {/* 保存しますか？ — はい / いいえ sit either side of the mic (overlaid,
-            so they appearing never moves anything else on screen). */}
-        {awaitingSaveConfirm && (
-          <button
-            key="confirm-yes"
-            type="button"
-            className={`btn btn-success ${styles.photoUploadBtn} ${styles.toolbarBtn} ${styles.primaryBtn} ${styles.confirmYes}`}
-            onClick={confirmSaveYes}
-            disabled={savingRecord}
-          >
-            <FloppyFill size="1em" />
-            <span>はい</span>
-          </button>
-        )}
         <button
           className={`${styles.micButton} ${isListening ? styles.isListening : ""}`}
           onClick={isListening ? handleStopListening : handleStartListening}
@@ -2417,19 +2467,7 @@ export default function StatusMatcher() {
         >
           {isListening ? <StopFill size={28} /> : <MicFill size={28} />}
         </button>
-        {awaitingSaveConfirm ? (
-          <button
-            key="confirm-no"
-            type="button"
-            className={`btn btn-outline-primary ${styles.toolbarBtn} ${styles.secondaryBtn} ${styles.confirmNo}`}
-            onClick={confirmSaveNo}
-            disabled={savingRecord}
-          >
-            いいえ
-          </button>
-        ) : (
-          isSearching && <p key="searching" className={`${styles.statusText} ${styles.statusTextFloat}`}>検索中…</p>
-        )}
+        {isSearching && <p key="searching" className={`${styles.statusText} ${styles.statusTextFloat}`}>検索中…</p>}
       </div>
 
       {/* The 「候補 n 件…」 match alert is no longer shown: popping in under
